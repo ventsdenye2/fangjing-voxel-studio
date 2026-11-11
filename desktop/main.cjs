@@ -4,6 +4,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { createConverter } = require('./binvox.cjs');
+const { isLocalResourceURL } = require('./resource-policy.cjs');
 const { execFile } = require('node:child_process');
 const converter = createConverter();
 let window;
@@ -64,8 +65,7 @@ app.whenReady().then(async () => {
       allowed = url.protocol === 'blob:' || url.protocol === 'data:';
       if (devURL) allowed ||= url.origin === new URL(devURL).origin || (url.protocol === 'ws:' && url.host === new URL(devURL).host);
       else if (url.protocol === 'file:') {
-        const base = pathToFileURL(path.join(__dirname, '../dist') + path.sep).href;
-        allowed ||= url.href.startsWith(base);
+        allowed ||= isLocalResourceURL(url.href, path.join(__dirname, '../dist')); 
       }
     } catch {}
     callback({ cancel: !allowed });

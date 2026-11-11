@@ -1,6 +1,6 @@
 {
   "name": "fangjing-voxel-studio",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "private": true,
   "type": "module",
   "description": "方境 · 体素资产与关卡编辑器",
