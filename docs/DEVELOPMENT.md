@@ -33,3 +33,5 @@
 ## Alpha.3 启动修复
 
 Alpha.2 Windows portable 启动时出现 ERR_BLOCKED_BY_CLIENT：临时目录短用户名含 ~，Node file URL 编码为 %7E，而 Chromium 请求保留 ~，字符串前缀比较误拦截。Alpha.3 使用 fileURLToPath 解码后检查目录包含关系，继续阻止目录穿越与目录外请求。新增四项回归测试通过，涵盖短路径编码、Windows 大小写、目录穿越、Mac 空格与中文路径。Alpha.2 不应作为可用 Windows 版本分发。
+
+Alpha.3 本地 portable EXE 已实际启动验证：解压到含 ~ 的 Windows 短用户名临时目录，app.asar/dist/index.html 成功加载，示例关卡显示、资源 Worker 正常，设置面板显示 binvox is ready。截图 portable-alpha3-verified.png。
