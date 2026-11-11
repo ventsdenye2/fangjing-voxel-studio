@@ -13,7 +13,8 @@
     "desktop": "electron .",
     "desktop:dev": "node scripts/dev-desktop.mjs",
     "pack:win": "npm run build && electron-builder --win portable --x64",
-    "pack:mac": "npm run build && electron-builder --mac dmg --arm64"
+    "pack:mac": "npm run build && electron-builder --mac dmg --arm64",
+    "build:tutorial": "tsc --noEmit && vite build --config vite.tutorial.config.ts"
   },
   "dependencies": {
     "fflate": "^0.8.2",

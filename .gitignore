@@ -9,3 +9,5 @@ tests/fixtures/forgeax/node_modules/
 .tools-gh-release.json
 
 tests/fixtures/forgeax/
+
+dist-tutorial/
