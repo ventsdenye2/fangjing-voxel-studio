@@ -8,6 +8,9 @@ const { isLocalResourceURL } = require('./resource-policy.cjs');
 const { execFile } = require('node:child_process');
 const converter = createConverter();
 let window;
+const hasInstanceLock=app.requestSingleInstanceLock();
+if(!hasInstanceLock)app.quit();
+else app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
 let settings = { binvoxPath: '' };
 const MAX_FILE = 128 * 1024 * 1024;
 function effectiveBinvox() {
@@ -48,6 +51,7 @@ function register(channel, handler) {
   });
 }
 app.whenReady().then(async () => {
+  if(!hasInstanceLock)return;
   const settingsFile = path.join(app.getPath('userData'), 'settings.json');
   try { const saved = JSON.parse(await fs.readFile(settingsFile, 'utf8')); if (typeof saved.binvoxPath === 'string' && path.isAbsolute(saved.binvoxPath)) settings.binvoxPath = saved.binvoxPath; } catch {}
   const devURL = developmentURL();

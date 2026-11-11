@@ -2,11 +2,13 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const MAX_OBJ_BYTES = 64 * 1024 * 1024;
+const MAX_OBJ_BYTES = 128 * 1024 * 1024;
 const MAX_LOG_BYTES = 64 * 1024;
 function validateRequest(request) {
   if (!request || ![32, 64, 128, 256, 512].includes(request.resolution) || typeof request.obj !== 'string') throw new Error('Invalid conversion request');
-  if (!request.obj.trim() || Buffer.byteLength(request.obj) > MAX_OBJ_BYTES || request.obj.includes('\0')) throw new Error('OBJ must contain 1–64 MiB of valid text');
+  if (!request.obj.trim() || request.obj.includes('\0')) throw new Error('转换模型为空或包含无效文本');
+  const bytes=Buffer.byteLength(request.obj);
+  if (bytes > MAX_OBJ_BYTES) throw new Error('转换几何数据为 '+(bytes/1024/1024).toFixed(1)+' MiB，超过 128 MiB 上限。请先减面；降低体素分辨率不会缩小输入模型。');
   // Only geometry is needed. Forbid directives that load external files.
   if (/^\s*(?:mtllib|call|csh)\s/im.test(request.obj)) throw new Error('External OBJ file directives are unsupported');
 }
@@ -31,6 +33,7 @@ function createConverter(options = {}) {
         if (job.cancelled) return reject(new Error('Conversion cancelled'));
         const child = spawnProcess(executable, ['-e', '-d', String(request.resolution), input], { cwd: directory, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
         job.child = child;
+        try { if(child.pid) os.setPriority(child.pid,os.constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
         child.stdout.on('data', append);
         child.stderr.on('data', append);
         const timer = setTimeout(() => { job.timedOut = true; child.kill('SIGKILL'); }, options.timeoutMs || 120000);

@@ -4,8 +4,8 @@ import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import {MTLLoader} from 'three/addons/loaders/MTLLoader.js';
 import {MeshBVH} from 'three-mesh-bvh';
 import type {ModelSource,VoxelAsset} from './types';
-type Face={material:THREE.Material;uv?:THREE.Vector2[];colors?:THREE.Color[]};
-function base64(bytes:Uint8Array){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
+import {geometryOnlyObj,trianglesToObj} from './obj-geometry';
+import {encodeSourceFiles} from './source-codec';
 function normalizedPath(path: string): string {
   const result: string[] = [];
   for (const part of decodeURIComponent(path).replaceAll('\\', '/').split('/')) {
@@ -73,11 +73,13 @@ export async function importModel(files: File[]): Promise<{
   manager.onLoad = () => finishLoading();
   manager.onError = url => warn('Unable to decode texture: ' + url + '. Using material color.');
   let object: THREE.Object3D;
+  let sourceObj: string|undefined;
   try {
     if (/\.glb$/i.test(main.name)) {
       object = (await new GLTFLoader(manager).parseAsync(await main.arrayBuffer(), directory(mainPath))).scene;
     } else {
       const text = await main.text();
+      sourceObj = geometryOnlyObj(text);
       const reference = /^mtllib\s+(.+)$/mi.exec(text)?.[1].trim();
       const mtl = reference ? findFile(directory(mainPath) + reference) : files.find(file => /\.mtl$/i.test(file.name));
       const loader = new OBJLoader(manager);
@@ -94,48 +96,45 @@ export async function importModel(files: File[]): Promise<{
     if (loadingStarted) await loaded;
     object.userData.importWarnings = warnings;
     object.updateMatrixWorld(true);
-    const positions: number[] = [];
-    const faces: Face[] = [];
-    const objLines: string[] = [];
-    let vertex = 1;
-    object.traverse(child => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const geometry = child.geometry as THREE.BufferGeometry;
-      const position = geometry.getAttribute('position');
-      if (!position) return;
-      const colors = geometry.getAttribute('color');
-      const index = geometry.getIndex();
-      const count = index?.count ?? position.count;
-      const mirrored = child.matrixWorld.determinant() < 0;
-      for (let i = 0; i + 2 < count; i += 3) {
-        const order = mirrored ? [0, 2, 1] : [0, 1, 2];
-        const indices = order.map(j => index ? index.getX(i + j) : i + j);
-        for (const idx of indices) {
-          const point = child.getVertexPosition(idx, new THREE.Vector3()).applyMatrix4(child.matrixWorld);
-          positions.push(point.x, point.y, point.z);
-          objLines.push('v ' + point.x + ' ' + point.y + ' ' + point.z);
+    const meshes:THREE.Mesh[]=[];let triangleCount=0,hasUV=false,hasColor=false;
+    object.traverse(child=>{if(child instanceof THREE.Mesh&&child.geometry.getAttribute('position')){meshes.push(child);triangleCount+=Math.floor((child.geometry.index?.count??child.geometry.getAttribute('position').count)/3);hasUV ||= Object.keys(child.geometry.attributes).some(k=>k.startsWith('uv'));hasColor ||= !!child.geometry.getAttribute('color');}});
+    if(!triangleCount)throw Error('Model has no triangles');
+    if(triangleCount>3000000)throw Error('模型超过 300 万三角面，请先在建模工具中减面。');
+    const positions=new Float32Array(triangleCount*9);
+    const uvValues=hasUV?new Float32Array(triangleCount*6):null;
+    const colorValues=hasColor?new Float32Array(triangleCount*9).fill(1):null;
+    const faceMaterials=new Uint32Array(triangleCount);
+    const faceHasUV=hasUV?new Uint8Array(triangleCount):null;
+    const materials:THREE.Material[]=[];const materialIds=new Map<THREE.Material,number>();
+    const defaultMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
+    const point=new THREE.Vector3();let faceIndex=0;
+    for(const child of meshes){
+      const geo=child.geometry;const pos=geo.getAttribute('position'),colors=geo.getAttribute('color'),index=geo.getIndex();
+      const count=index?.count??pos.count;const mirrored=child.matrixWorld.determinant()<0;
+      for(let i=0;i+2<count;i+=3){
+        const group=geo.groups.find(g=>i>=g.start&&i<g.start+g.count);
+        const material=(Array.isArray(child.material)?child.material[group?.materialIndex??0]:child.material)??defaultMaterial;
+        let matId=materialIds.get(material);if(matId===undefined){matId=materials.length;materials.push(material);materialIds.set(material,matId);}faceMaterials[faceIndex]=matId;
+        const channel=(material as THREE.MeshStandardMaterial).map?.channel??0;
+        const uv=geo.getAttribute(channel===0?'uv':'uv'+channel);
+        if(faceHasUV&&uv)faceHasUV[faceIndex]=1;
+        for(let j=0;j<3;j++){
+          const order=mirrored&&j>0?3-j:j;const idx=index?index.getX(i+order):i+order;
+          child.getVertexPosition(idx,point).applyMatrix4(child.matrixWorld);
+          const offset=faceIndex*9+j*3;positions[offset]=point.x;positions[offset+1]=point.y;positions[offset+2]=point.z;
+          if(uv&&uvValues){uvValues[faceIndex*6+j*2]=uv.getX(idx);uvValues[faceIndex*6+j*2+1]=uv.getY(idx);}
+          if(colors&&colorValues){colorValues[offset]=colors.getX(idx);colorValues[offset+1]=colors.getY(idx);colorValues[offset+2]=colors.getZ(idx);}
         }
-        objLines.push('f ' + vertex + ' ' + (vertex + 1) + ' ' + (vertex + 2));
-        vertex += 3;
-        const group = geometry.groups.find(group => i >= group.start && i < group.start + group.count);
-        const material = (Array.isArray(child.material) ? child.material[group?.materialIndex ?? 0] : child.material)
-          ?? new THREE.MeshStandardMaterial({ color: 0xffffff });
-        const channel = (material as THREE.MeshStandardMaterial).map?.channel ?? 0;
-        const uv = geometry.getAttribute(channel === 0 ? 'uv' : 'uv' + channel);
-        faces.push({
-          material,
-          uv: uv ? indices.map(idx => new THREE.Vector2(uv.getX(idx), uv.getY(idx))) : undefined,
-          colors: colors ? indices.map(idx => new THREE.Color().setRGB(colors.getX(idx), colors.getY(idx), colors.getZ(idx))) : undefined,
-        });
+        faceIndex++;
+        if(faceIndex%8192===0)await new Promise(r=>setTimeout(r,0));
       }
-    });
-    if (!positions.length) throw new Error('Model has no triangles');
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    }
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
     const bvh = new MeshBVH(geometry, { indirect: true });
     const canvases = new Map<THREE.Texture, { data: Uint8ClampedArray; width: number; height: number }>();
-    for (const face of faces) {
-      const texture = (face.material as THREE.MeshStandardMaterial).map;
+    for (const material of materials) {
+      const texture = (material as THREE.MeshStandardMaterial).map;
       if (!texture || canvases.has(texture)) continue;
       const image = texture.image;
       if (!image || !image.width || !image.height) continue;
@@ -165,28 +164,25 @@ export async function importModel(files: File[]): Promise<{
     const sampleColor = (point: THREE.Vector3): string => {
       const hit = bvh.closestPointToPoint(point);
       if (!hit) return '#b7c9e2';
-      const face = faces[hit.faceIndex];
+      const colorOffset=hit.faceIndex*9,uvOffset=hit.faceIndex*6;
       triangle.a.fromBufferAttribute(position, hit.faceIndex * 3);
       triangle.b.fromBufferAttribute(position, hit.faceIndex * 3 + 1);
       triangle.c.fromBufferAttribute(position, hit.faceIndex * 3 + 2);
       if (!triangle.getBarycoord(hit.point, barycentric)) barycentric.set(1, 0, 0);
-      const material = face.material as THREE.MeshStandardMaterial;
+      const material = materials[faceMaterials[hit.faceIndex]] as THREE.MeshStandardMaterial;
       color.copy(material.color ?? new THREE.Color('white'));
-      if (material.vertexColors && face.colors) {
+      if (material.vertexColors && colorValues) {
         sampled.setRGB(
-          face.colors[0].r * barycentric.x + face.colors[1].r * barycentric.y + face.colors[2].r * barycentric.z,
-          face.colors[0].g * barycentric.x + face.colors[1].g * barycentric.y + face.colors[2].g * barycentric.z,
-          face.colors[0].b * barycentric.x + face.colors[1].b * barycentric.y + face.colors[2].b * barycentric.z,
+          colorValues[colorOffset+0] * barycentric.x + colorValues[colorOffset+3] * barycentric.y + colorValues[colorOffset+6] * barycentric.z,
+          colorValues[colorOffset+1] * barycentric.x + colorValues[colorOffset+4] * barycentric.y + colorValues[colorOffset+7] * barycentric.z,
+          colorValues[colorOffset+2] * barycentric.x + colorValues[colorOffset+5] * barycentric.y + colorValues[colorOffset+8] * barycentric.z,
         );
         color.multiply(sampled);
       }
       const texture = material.map;
       const pixels = texture && canvases.get(texture);
-      if (texture && pixels && face.uv) {
-        uv.set(0, 0)
-          .addScaledVector(face.uv[0], barycentric.x)
-          .addScaledVector(face.uv[1], barycentric.y)
-          .addScaledVector(face.uv[2], barycentric.z);
+      if (texture && pixels && uvValues && faceHasUV?.[hit.faceIndex]) {
+        uv.set(uvValues[uvOffset]*barycentric.x+uvValues[uvOffset+2]*barycentric.y+uvValues[uvOffset+4]*barycentric.z,uvValues[uvOffset+1]*barycentric.x+uvValues[uvOffset+3]*barycentric.y+uvValues[uvOffset+5]*barycentric.z);
         texture.updateMatrix();
         texture.transformUv(uv);
         const x = Math.min(pixels.width - 1, Math.max(0, Math.floor(uv.x * pixels.width)));
@@ -205,12 +201,9 @@ export async function importModel(files: File[]): Promise<{
     const source: ModelSource = {
       id: crypto.randomUUID(),
       name: main.name,
-      files: await Promise.all(files.map(async file => ({
-        name: file.webkitRelativePath || file.name,
-        data: base64(new Uint8Array(await file.arrayBuffer())),
-      }))),
+      files: await encodeSourceFiles(files),
     };
-    return { source, object, obj: objLines.join('\n') + '\n', sampleColor, warnings };
+    return { source, object, obj: sourceObj ?? await trianglesToObj(positions), sampleColor, warnings };
   } finally {
     for (const url of urls.values()) URL.revokeObjectURL(url);
   }

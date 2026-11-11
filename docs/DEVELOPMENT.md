@@ -35,3 +35,12 @@
 Alpha.2 Windows portable 启动时出现 ERR_BLOCKED_BY_CLIENT：临时目录短用户名含 ~，Node file URL 编码为 %7E，而 Chromium 请求保留 ~，字符串前缀比较误拦截。Alpha.3 使用 fileURLToPath 解码后检查目录包含关系，继续阻止目录穿越与目录外请求。新增四项回归测试通过，涵盖短路径编码、Windows 大小写、目录穿越、Mac 空格与中文路径。Alpha.2 不应作为可用 Windows 版本分发。
 
 Alpha.3 本地 portable EXE 已实际启动验证：解压到含 ~ 的 Windows 短用户名临时目录，app.asar/dist/index.html 成功加载，示例关卡显示、资源 Worker 正常，设置面板显示 binvox is ready。截图 portable-alpha3-verified.png。
+
+## Alpha.4 大模型转换修复
+
+用户真实 OBJ 约 134 MiB、1,847,423 三角面。旧版导入时重复展开顶点并生成超长坐标文本，再触发 64 MiB 转换上限。新版对 OBJ 保留原始顶点索引，只传几何；同一模型输入约 66.3 MiB，转换输入预算明确为 128 MiB。超过预算时显示实际大小，并说明降低体素档位不会缩小输入模型。64 档 binvox 独立转换得到 14,364 个体素；日志报告模型加载内存约 2.3 GiB。
+
+颜色采样数据改为连续 typed arrays，避免每个三角面创建多个 Vector2/Color 对象。源文件逐项 gzip 压缩后保存，兼容旧 base64 工程；解压有 512 MiB 总预算。新增单实例保护，防止重复程序共享草稿数据库；草稿错误不再丢失原因。58 项测试通过。真实模型、截图和本机日志只留在 artifacts，不纳入开源。
+
+Alpha.4 Windows portable 实机验证：用户同一模型在 EXE 中以 64 分辨率完成转换，得到 14,364 体素、12,284 种采样颜色，界面彩色预览正常。工程包保存为 34,799,484 字节并成功重新打开，草稿自动保存成功。解压工程内 gzip 源文件后与原始 140,410,796 字节 OBJ 的 SHA-256 完全一致。macOS 仍未做真机验证。
+重开工程后再次使用“从源模型重新转换”，成功恢复 1,847,423 三角面的源模型预览。
