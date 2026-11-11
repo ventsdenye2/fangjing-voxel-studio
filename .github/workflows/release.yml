@@ -1,0 +1,82 @@
+name: Desktop release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: pack:win
+            artifact: windows-x64
+            pattern: release/*.exe
+          - os: macos-14
+            script: pack:mac
+            artifact: macos-arm64
+            pattern: release/*.dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Match application version to tag
+        shell: bash
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
+      - name: Mark macOS helper executable
+        if: runner.os == 'macOS'
+        run: chmod 755 resources/binvox/darwin-x64/binvox
+      - name: Package desktop
+        run: npm run ${{ matrix.script }} -- --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.pattern }}
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish completed builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          prerelease=false
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=true; fi
+          cat > release-notes.md <<'NOTES'
+          Windows x64 portable executable and macOS Apple Silicon disk image.
+
+          These builds are unsigned. The macOS package has not yet been verified on a physical Mac. Unmodified binvox is bundled with its redistribution license and notices. Apple Silicon uses the bundled x86_64 binvox through Rosetta 2. Private source model assets are excluded.
+          NOTES
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "方境 Voxel Studio $RELEASE_TAG" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease"

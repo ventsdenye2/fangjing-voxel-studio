@@ -1,0 +1,4 @@
+import type {Project} from './types';
+function db():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const req=indexedDB.open('fangjing-studio',1);req.onupgradeneeded=()=>req.result.createObjectStore('draft');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
+export async function saveDraft(project:Project){const d=await db();await new Promise<void>((resolve,reject)=>{const tx=d.transaction('draft','readwrite');tx.objectStore('draft').put(project,'current');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});d.close();}
+export async function loadDraft():Promise<Project|undefined>{const d=await db();return await new Promise((resolve,reject)=>{const r=d.transaction('draft').objectStore('draft').get('current');r.onsuccess=()=>{d.close();resolve(r.result);};r.onerror=()=>reject(r.error);});}

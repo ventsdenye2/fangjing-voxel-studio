@@ -1,0 +1,13 @@
+{
+  "engine": "@forgeax/engine 0.4.19",
+  "fixture": "one red voxel with a transformed parent group",
+  "projectBuild": "passed",
+  "assetVerify": { "assetCount": 3, "emittedAssetCount": 3, "unproducedAssetCount": 0, "unmaterializedScriptablePackCount": 0 },
+  "assetInspect": [
+    { "sourceKey": "mesh/626c6f636b", "kind": "mesh", "ready": true },
+    { "sourceKey": "material/voxel", "kind": "material", "ready": true },
+    { "sourceKey": "scene/main", "kind": "scene", "ready": true, "references": ["mesh/626c6f636b", "material/voxel"] }
+  ],
+  "runtime": { "status": "passed for fixtures", "backend": "hardware", "sceneEntity": "Block", "worldPosition": [1, 0, 0], "screenshot": "forgeax-runtime-fixture.png", "observation": "A red voxel was visible; the named child inherited its parent translation." },
+  "courtyard": { "status": "passed", "source": "createDemo with translated and 30-degree rotated root", "exportBytes": 29346, "treeWorldPosition": [-1.5150635, 0, 0.6437823], "screenshot": "forgeax-courtyard-fixture.png", "observation": "House, tree, ground and colors rendered; tree world position matched the parent transform." }
+}

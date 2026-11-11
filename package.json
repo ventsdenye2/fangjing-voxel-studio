@@ -1,0 +1,91 @@
+{
+  "name": "fangjing-voxel-studio",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "方境 · 体素资产与关卡编辑器",
+  "author": "Voxel Studio",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "desktop": "electron .",
+    "desktop:dev": "node scripts/dev-desktop.mjs",
+    "pack:win": "npm run build && electron-builder --win portable --x64",
+    "pack:mac": "npm run build && electron-builder --mac dmg --arm64"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "immer": "^11.2.10",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.180.0",
+    "three-mesh-bvh": "^0.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.180.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.1.0",
+    "vitest": "^3.2.0"
+  },
+  "build": {
+    "appId": "studio.fangjing.voxel",
+    "productName": "方境 Voxel Studio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "extraResources": [
+        {
+          "from": "resources/binvox/win32-x64",
+          "to": "binvox/win32-x64"
+        },
+        {
+          "from": "resources/binvox/LICENSE.txt",
+          "to": "binvox/LICENSE.txt"
+        },
+        {
+          "from": "resources/binvox/README.md",
+          "to": "binvox/README.md"
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.graphics-design",
+      "extraResources": [
+        {
+          "from": "resources/binvox/darwin-x64",
+          "to": "binvox/darwin-x64"
+        },
+        {
+          "from": "resources/binvox/LICENSE.txt",
+          "to": "binvox/LICENSE.txt"
+        },
+        {
+          "from": "resources/binvox/README.md",
+          "to": "binvox/README.md"
+        }
+      ]
+    },
+    "compression": "normal"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ventsdenye2/fangjing-voxel-studio.git"
+  }
+}

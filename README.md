@@ -2,7 +2,9 @@
 
 面向美术的本地体素资产与关卡编辑器。Windows / macOS 共用一套 Electron + React + Three.js 源码。
 
-> 开发中，首次发布将使用预发布版本。完成情况与实际验证记录见 [开发记录](docs/DEVELOPMENT.md)。
+> Alpha 预发布版本。Windows 基础链路和天工导入已验证；Mac 真机、持续帧率与峰值内存仍待验收。完成情况见 [开发记录](docs/DEVELOPMENT.md)。
+
+[下载安装包](https://github.com/ventsdenye2/fangjing-voxel-studio/releases) · [美术使用指南](docs/ARTIST-GUIDE.md)
 
 ## 工作流
 
