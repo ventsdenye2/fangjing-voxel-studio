@@ -80,3 +80,16 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease"
+
+      - name: Mark superseded broken portable release
+        if: github.ref_name != 'v0.1.0-alpha.2'
+        shell: bash
+        run: |
+          if gh release view v0.1.0-alpha.2 >/dev/null 2>&1; then
+            cat > obsolete-notes.md <<'NOTES'
+          This release is superseded. The Windows portable EXE may fail at startup with ERR_BLOCKED_BY_CLIENT when its temporary path contains a short username (~). Use v0.1.0-alpha.3 or newer, which fixes file URL normalization.
+
+          Download the corrected builds from https://github.com/ventsdenye2/fangjing-voxel-studio/releases . The macOS build remains unsigned and unverified on physical hardware.
+          NOTES
+            gh release edit v0.1.0-alpha.2 --title 'Superseded: Voxel Studio v0.1.0-alpha.2' --notes-file obsolete-notes.md
+          fi
