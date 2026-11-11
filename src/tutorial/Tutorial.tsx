@@ -72,7 +72,7 @@ export default function Tutorial(){
  },[]);
  const canNavigate=(n:number)=>n===0||Array.from({length:n},(_,i)=>i).every(i=>done.includes(i));
  return <div className="tutorial-root" ref={root}>
-  <div className="tutorial-strip"><strong>方境交互教程</strong><span>真实编辑界面 · 转换步骤使用预制样例</span><nav><button onClick={()=>setPaused(v=>!v)}>{paused?'继续引导':'暂停引导'}</button><button onClick={reset}>重新练习</button><a href="https://github.com/ventsdenye2/fangjing-voxel-studio/releases" target="_blank" rel="noreferrer">下载桌面版 ↗</a></nav></div>
+  <div className="tutorial-strip"><strong>方境交互教程</strong><span>真实编辑界面 · 转换步骤使用预制样例</span><nav><a href="./">返回首页</a><button onClick={()=>setPaused(v=>!v)}>{paused?'继续引导':'暂停引导'}</button><button onClick={reset}>重新练习</button><a href="https://github.com/ventsdenye2/fangjing-voxel-studio/releases" target="_blank" rel="noreferrer">下载桌面版 ↗</a></nav></div>
   <Editor key={run} tutorial={adapter}/>
   {!paused&&!finished&&regions&&<svg className="tutorial-mask" aria-hidden="true"><path d={path(regions.outer)+regions.holes.map(path).join('')} fillRule="evenodd"/>{regions.holes.map((r,i)=><rect key={i} x={r.x} y={r.y} width={r.width} height={r.height} rx={5}/>)}</svg>}
   <section className="tutorial-dock" aria-label="操作引导">

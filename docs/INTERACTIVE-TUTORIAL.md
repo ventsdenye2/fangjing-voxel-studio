@@ -1,6 +1,10 @@
 # 交互教程
 
-在线地址：https://ventsdenye2.github.io/fangjing-voxel-studio/
+网站首页：https://ventsdenye2.github.io/fangjing-voxel-studio/
+
+互动教程：https://ventsdenye2.github.io/fangjing-voxel-studio/learn.html
+
+首页提供下载桌面版、阅读文字教程、开始互动教程三个入口，并使用内置庭院数据渲染可拖动预览。WebGL 不可用时显示静态样例图。教程顶部可返回首页。
 
 教程直接渲染 src/App.tsx，复用桌面版的布局、图标、样式、Three.js 视口及工程导出逻辑。引导条放在编辑器外，蒙版只突出本步的真实控件。
 
