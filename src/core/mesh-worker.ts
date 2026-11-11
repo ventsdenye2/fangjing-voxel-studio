@@ -1,3 +1,4 @@
+import {setResourceLimits} from './resource-limits';
 import { parseBinvox } from './binvox';
 import { buildVoxelGeometry } from './mesh';
 import type { MeshWorkerRequest, MeshWorkerResponse, MeshBuffers } from './worker-mesh';
@@ -9,6 +10,7 @@ const scope = globalThis as unknown as {
 scope.onmessage = event => {
   const request = event.data;
   try {
+    setResourceLimits(request.limits);
     if (request.type === 'parse') {
       scope.postMessage({ id: request.id, result: parseBinvox(request.bytes, request.name) });
       return;

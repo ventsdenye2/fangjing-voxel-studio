@@ -32,7 +32,7 @@ describe('high resolution grids', () => {
     expect(Object.keys(result.cells)).toEqual([[resolution - 1, resolution - 1, resolution - 1].join(',')]);
   });
   it('rejects excessive occupancy before materializing cells', () => {
-    expect(() => parseBinvox(fixture(runs(1, MAX_OCCUPIED_VOXELS + 1), '512 512 512'))).toThrow(/memory budget/);
+    expect(() => parseBinvox(fixture(runs(1, MAX_OCCUPIED_VOXELS + 1), '512 512 512'))).toThrow(/预算/);
   });
 });
 

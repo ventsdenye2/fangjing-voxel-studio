@@ -1,11 +1,13 @@
 import type { VoxelAsset } from './types';
+import {DEFAULT_RESOURCE_LIMITS,getResourceLimits,assertBudget} from './resource-limits';
 
 // Sparse records remain practical for surface grids at 512³. Dense grids need a
 // different storage representation, so reject them before allocating cell keys.
-export const MAX_OCCUPIED_VOXELS = 2_000_000;
+export const MAX_OCCUPIED_VOXELS = DEFAULT_RESOURCE_LIMITS.occupiedVoxels;
 
 export function parseBinvox(input: ArrayBuffer | Uint8Array, name = 'Voxel model'): VoxelAsset {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const limit = getResourceLimits().occupiedVoxels;
   let offset = 0;
   function line(): string {
     const start = offset;
@@ -49,7 +51,7 @@ export function parseBinvox(input: ArrayBuffer | Uint8Array, name = 'Voxel model
     const count = bytes[offset++];
     if (value > 1 || count === 0 || index + count > total) throw new Error('Invalid RLE');
     occupied += value * count;
-    if (occupied > MAX_OCCUPIED_VOXELS) throw new Error('Model exceeds the 2,000,000 occupied-voxel memory budget. Use a lower resolution or surface voxelization.');
+    assertBudget(occupied, limit, '单个资产占用体素数');
     index += count;
   }
   if (index !== total) throw new Error('Incomplete RLE');

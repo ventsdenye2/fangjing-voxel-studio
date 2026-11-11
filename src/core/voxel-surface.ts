@@ -1,4 +1,5 @@
 import type { Vec3, VoxelAsset } from './types';
+import {DEFAULT_RESOURCE_LIMITS,getResourceLimits,assertBudget} from './resource-limits';
 
 /** A grid-space quad. Its u × v direction equals its outward normal. */
 export interface SurfaceQuad {
@@ -9,11 +10,12 @@ export interface SurfaceQuad {
   color: string;
 }
 
-export const MAX_MERGED_QUADS = 500_000;
+export const MAX_MERGED_QUADS = DEFAULT_RESOURCE_LIMITS.mergedQuads;
 
 /** Greedy same-color surface meshing with one bounded 2D mask at a time. */
 export function generateMergedFaces(asset: VoxelAsset): SurfaceQuad[] {
   const quads: SurfaceQuad[] = [];
+  const limit=getResourceLimits().mergedQuads;
   for (let axis = 0; axis < 3; axis++) {
     const uAxis = (axis + 1) % 3;
     const vAxis = (axis + 2) % 3;
@@ -86,7 +88,7 @@ export function generateMergedFaces(asset: VoxelAsset): SurfaceQuad[] {
           v[vAxis] = height;
           normal[axis] = sign;
           quads.push({ origin, u: sign > 0 ? u : v, v: sign > 0 ? v : u, normal, color: palette[colorId] });
-          if (quads.length > MAX_MERGED_QUADS) throw new Error('Model exceeds the 500,000 merged-face rendering budget. Use a lower resolution.');
+          assertBudget(quads.length,limit,'单个资产合并表面数');
           for (let dy = 0; dy < height; dy++) mask.fill(0, x + (y + dy) * columns, x + width + (y + dy) * columns);
           x += width - 1;
         }

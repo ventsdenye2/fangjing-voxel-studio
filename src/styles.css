@@ -3,3 +3,5 @@
 .viewport-loading{position:absolute;left:14px;top:14px;z-index:3;background:#26362fee;color:#c0dec9;padding:9px 13px;border:1px solid #557765;border-radius:5px;font-size:12px}.readiness{padding:10px;background:#2e4037;border:1px solid #557765;border-radius:4px}
 
 .viewport-stats{position:absolute;bottom:10px;right:12px;color:#a4b4bf;font-size:10px;padding:5px 8px;background:#1b242ccc;border-radius:3px;pointer-events:none}.viewport-loading.error{color:#ffd6cb;border-color:#b17569;max-width:85%}
+
+.modal{max-height:calc(100vh - 40px);overflow:auto}.resource-settings{margin-top:20px;border-top:1px solid var(--line);padding-top:15px}.resource-settings summary{cursor:pointer;font-size:15px;font-weight:600}.resource-fields{display:grid;gap:10px}.resource-fields>label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}.resource-fields>label>div{display:flex;align-items:center;gap:8px}.resource-fields input{width:100px}.resource-fields small{width:30px;color:var(--muted)}

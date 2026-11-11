@@ -1,16 +1,17 @@
 import { gzip } from 'fflate';
 import type { SourceFile } from './types';
+import {getResourceLimits, assertBudget} from './resource-limits';
 
-export const MAX_SOURCE_BYTES = 512 * 1024 * 1024;
+export const MAX_SOURCE_BYTES = 2 * 1024 ** 3;
 export interface SourceCodecOptions {
   /** A smaller per-operation decoded-size budget can be supplied by callers. */
   maxTotalBytes?: number;
 }
 
 function budget(options: SourceCodecOptions): number {
-  const limit = options.maxTotalBytes ?? MAX_SOURCE_BYTES;
-  if (!Number.isSafeInteger(limit) || limit < 0 || limit > MAX_SOURCE_BYTES) {
-    throw new Error('Source size budget must be between 0 and 512 MiB');
+  const limit = options.maxTotalBytes ?? getResourceLimits().sourceBytes;
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new Error('Source size budget must be a non-negative safe integer');
   }
   return limit;
 }
@@ -47,7 +48,7 @@ export async function encodeSourceFiles(files: File[], options: SourceCodecOptio
   let total = 0;
   for (const file of files) {
     total += file.size;
-    if (total > limit) throw new Error('Source files exceed the decoded size budget');
+    assertBudget(total, limit, '源模型与贴图解压大小（字节）');
   }
   const result: SourceFile[] = [];
   // Sequential compression limits the operation to one compression worker.
@@ -100,17 +101,17 @@ async function decodeGzip(source: SourceFile, reserve: (length: number) => void)
 export async function decodeSourceFiles(files: SourceFile[], options: SourceCodecOptions = {}): Promise<File[]> {
   const limit = budget(options);
   let encodedBytes = 0;
-  const encodedLimit = MAX_SOURCE_BYTES + Math.ceil(MAX_SOURCE_BYTES * 0.01) + files.length * 64;
+  const encodedLimit = limit === 0 ? 0 : Math.min(Number.MAX_SAFE_INTEGER, limit + Math.ceil(limit * 0.01) + files.length * 64);
   for (const source of files) {
     if (typeof source.name !== 'string' || typeof source.data !== 'string') throw new Error('Invalid source file');
     if (source.encoding !== undefined && source.encoding !== 'gzip-base64') throw new Error('Unsupported source file encoding');
     encodedBytes += base64Length(source.data);
-    if (encodedBytes > encodedLimit) throw new Error('Encoded source files exceed the input size budget');
+    assertBudget(encodedBytes, encodedLimit, '源文件存储大小（字节）');
   }
   let decodedBytes = 0;
   const reserve = (length: number) => {
     decodedBytes += length;
-    if (decodedBytes > limit) throw new Error('Source files exceed the decoded size budget');
+    assertBudget(decodedBytes, limit, '源模型与贴图解压大小（字节）');
   };
   const result: File[] = [];
   for (const source of files) {

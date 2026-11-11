@@ -1,3 +1,4 @@
+import {sceneVisibility} from './scene-visibility';
 import * as THREE from 'three';
 import type {Project,VoxelAsset} from './types';
 import { generateMergedFaces } from './voxel-surface';
@@ -31,7 +32,8 @@ export function buildVoxelGeometry(asset: VoxelAsset): THREE.BufferGeometry {
   geometry.computeBoundingSphere();
   return geometry;
 }
-export function buildProjectScene(project: Project, geometryResolver: (asset: VoxelAsset) => THREE.BufferGeometry = buildVoxelGeometry): THREE.Group {
+export function buildProjectScene(project: Project, geometryResolver: (asset: VoxelAsset) => THREE.BufferGeometry = buildVoxelGeometry, visibleOnly = false): THREE.Group {
+  const visibility=visibleOnly?sceneVisibility(project):null;
   const root = new THREE.Group();
   root.name = project.name;
   const assets = new Map(project.assets.map(asset => [asset.id, asset]));
@@ -40,7 +42,7 @@ export function buildProjectScene(project: Project, geometryResolver: (asset: Vo
   for (const node of project.nodes) {
     const asset = node.assetId ? assets.get(node.assetId) : undefined;
     let object: THREE.Object3D;
-    if (node.kind === 'mesh' && asset) {
+    if (node.kind === 'mesh' && asset && (!visibility || visibility.get(node.id))) {
       let resources = meshes.get(asset.id);
       if (!resources) {
         resources = {

@@ -6,6 +6,7 @@ import {MeshBVH} from 'three-mesh-bvh';
 import type {ModelSource,VoxelAsset} from './types';
 import {geometryOnlyObj,trianglesToObj} from './obj-geometry';
 import {encodeSourceFiles} from './source-codec';
+import {assertBudget, getResourceLimits} from './resource-limits';
 function normalizedPath(path: string): string {
   const result: string[] = [];
   for (const part of decodeURIComponent(path).replaceAll('\\', '/').split('/')) {
@@ -23,6 +24,8 @@ export async function importModel(files: File[]): Promise<{
   sampleColor: (point: THREE.Vector3) => string;
   warnings: string[];
 }> {
+  const limits=getResourceLimits();
+  assertBudget(files.reduce((total,file)=>total+file.size,0),limits.sourceBytes,'源模型与贴图大小（字节）');
   const main = files.find(file => /\.glb$/i.test(file.name)) ?? files.find(file => /\.obj$/i.test(file.name));
   if (!main) throw new Error('Select a GLB or OBJ model');
   const localFiles = new Map<string, File>();
@@ -99,7 +102,7 @@ export async function importModel(files: File[]): Promise<{
     const meshes:THREE.Mesh[]=[];let triangleCount=0,hasUV=false,hasColor=false;
     object.traverse(child=>{if(child instanceof THREE.Mesh&&child.geometry.getAttribute('position')){meshes.push(child);triangleCount+=Math.floor((child.geometry.index?.count??child.geometry.getAttribute('position').count)/3);hasUV ||= Object.keys(child.geometry.attributes).some(k=>k.startsWith('uv'));hasColor ||= !!child.geometry.getAttribute('color');}});
     if(!triangleCount)throw Error('Model has no triangles');
-    if(triangleCount>3000000)throw Error('模型超过 300 万三角面，请先在建模工具中减面。');
+    assertBudget(triangleCount,limits.modelTriangles,'源模型三角面数');
     const positions=new Float32Array(triangleCount*9);
     const uvValues=hasUV?new Float32Array(triangleCount*6):null;
     const colorValues=hasColor?new Float32Array(triangleCount*9).fill(1):null;

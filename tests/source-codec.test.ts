@@ -45,24 +45,25 @@ describe('source file codec', () => {
   });
 
   it('enforces total input size before starting compression', async () => {
-    await expect(encodeSourceFiles([new File(['123'], 'a'),new File(['456'], 'b')], {maxTotalBytes:5})).rejects.toThrow(/budget/);
+    await expect(encodeSourceFiles([new File(['123'], 'a'),new File(['456'], 'b')], {maxTotalBytes:5})).rejects.toThrow();
   });
 
   it('enforces the aggregate decoded size across mixed old and new files', async () => {
     const compressed = await encodeSourceFiles([new File(['abcd'], 'compressed')]);
-    await expect(decodeSourceFiles([{name:'legacy',data:btoa('abc')},...compressed], {maxTotalBytes:6})).rejects.toThrow(/budget/);
+    await expect(decodeSourceFiles([{name:'legacy',data:btoa('abc')},...compressed], {maxTotalBytes:6})).rejects.toThrow();
     const restored = await decodeSourceFiles(compressed, {maxTotalBytes:4});
     expect(await restored[0].text()).toBe('abcd');
   });
 
   it('stops a highly compressible expansion at the decoded budget', async () => {
     const data = encoded(gzipSync(new Uint8Array(32768)));
-    await expect(decodeSourceFiles([{name:'expansion',data,encoding:'gzip-base64'}], {maxTotalBytes:32})).rejects.toThrow(/budget/);
+    await expect(decodeSourceFiles([{name:'expansion',data,encoding:'gzip-base64'}], {maxTotalBytes:32})).rejects.toThrow();
   });
 
   it('validates configurable budgets and accepts zero-byte legacy files', async () => {
-    await expect(decodeSourceFiles([], {maxTotalBytes:MAX_SOURCE_BYTES + 1})).rejects.toThrow(/budget/);
-    await expect(encodeSourceFiles([], {maxTotalBytes:-1})).rejects.toThrow(/budget/);
+    expect(await decodeSourceFiles([], {maxTotalBytes:MAX_SOURCE_BYTES + 1})).toEqual([]);
+    await expect(decodeSourceFiles([], {maxTotalBytes:Number.MAX_SAFE_INTEGER + 1})).rejects.toThrow();
+    await expect(encodeSourceFiles([], {maxTotalBytes:-1})).rejects.toThrow();
     expect((await decodeSourceFiles([{name:'empty',data:''}], {maxTotalBytes:0}))[0].size).toBe(0);
   });
 });

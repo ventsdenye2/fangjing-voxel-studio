@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import type { VoxelAsset } from './types';
+import {getResourceLimits,type ResourceLimits} from './resource-limits';
 
 export interface MeshBuffers {
   positions: Float32Array;
   normals: Float32Array;
   colors: Float32Array;
 }
-export type MeshWorkerRequest =
+export type MeshWorkerRequest = (
   | { id: number; type: 'mesh'; asset: VoxelAsset }
-  | { id: number; type: 'parse'; bytes: ArrayBuffer; name: string };
+  | { id: number; type: 'parse'; bytes: ArrayBuffer; name: string }) & {limits:ResourceLimits};
 export type MeshWorkerResponse =
   | { id: number; result: MeshBuffers | VoxelAsset }
   | { id: number; error: string };
@@ -124,7 +125,7 @@ export class MeshWorkerClient {
         if (slot.idleTimer) clearTimeout(slot.idleTimer);
         slot.idleTimer = undefined;
         slot.job = job;
-        slot.worker.postMessage({ ...job.payload, id: job.id } satisfies MeshWorkerRequest, job.transfer);
+        slot.worker.postMessage({ ...job.payload, id: job.id, limits:getResourceLimits() } satisfies MeshWorkerRequest, job.transfer);
       } catch (error) {
         if (slot) this.removeWorker(slot);
         this.pending.delete(job.id);
