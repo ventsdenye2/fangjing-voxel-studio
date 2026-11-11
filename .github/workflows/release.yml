@@ -19,7 +19,7 @@ jobs:
             script: pack:win
             artifact: windows-x64
             pattern: release/*.exe
-          - os: macos-14
+          - os: macos-15
             script: pack:mac
             artifact: macos-arm64
             pattern: release/*.dmg

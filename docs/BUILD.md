@@ -29,3 +29,5 @@ The electron-builder file allowlist includes dist, desktop and package.json toge
 The current host opens the packaged dist/index.html through file URLs. It uses sandboxing and context isolation, disables Node integration and webviews, denies new windows, blocks page navigation and rejects IPC from child frames. The request filter restricts file resources to the packaged dist directory and allows blob/data resources used for generated previews. Development additionally permits its configured loopback HTTP and matching WebSocket host.
 
 The current implementation does not register a custom application protocol. Its packaged file URL behavior still requires a launched packaged-app acceptance check. macOS signing, notarization and real-machine runtime acceptance remain unverified.
+
+The first alpha.1 release attempt could not schedule macos-14 because that runner was retired. Alpha.2 uses macos-15. Local Windows builds can reuse an installed runtime with npx electron-builder --win portable --x64 --publish never -c.electronDist=node_modules/electron/dist when the download cache is unavailable.
