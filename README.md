@@ -4,7 +4,7 @@
 
 目前直接支持 GLB，以及带 MTL 材质和贴图的 OBJ。转换在桌面版本机运行，支持 Windows 和 macOS。
 
-[下载安装包](https://github.com/ventsdenye2/fangjing-voxel-studio/releases) · [美术使用指南](docs/ARTIST-GUIDE.md)
+[下载安装包](https://github.com/ventsdenye2/fangjing-voxel-studio/releases) · [交互教程](https://ventsdenye2.github.io/fangjing-voxel-studio/) · [美术使用指南](docs/ARTIST-GUIDE.md)
 
 当前为 Alpha 预发布版本。Windows 的模型转换、编辑、保存和天工导入流程已验证；macOS 尚未完成真机验证，持续帧率与峰值内存也仍待测试。具体进展见 [开发记录](docs/DEVELOPMENT.md)。
 
