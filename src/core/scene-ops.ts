@@ -14,7 +14,7 @@ function subtree(project:Project, root:string):SceneNode[]{const result:SceneNod
 /** Duplicate complete selected subtrees; assets stay shared. */
 export function duplicateNodes(project:Project,ids:readonly string[]):string[]{
  const roots=selectedRoots(project,ids), created:string[]=[];
- for(const root of roots){const nodes=subtree(project,root.id);if(nodes.some(n=>n.locked))continue;const mapping=new Map(nodes.map(n=>[n.id,crypto.randomUUID()]));for(const n of nodes){const copy=structuredClone(n);copy.id=mapping.get(n.id)!;copy.name=n.id===root.id?`${n.name} 副本`:n.name;if(n.parentId&&mapping.has(n.parentId))copy.parentId=mapping.get(n.parentId);project.nodes.push(copy);}created.push(mapping.get(root.id)!);}
+ for(const root of roots){const nodes=subtree(project,root.id);if(nodes.some(n=>n.locked))continue;const mapping=new Map(nodes.map(n=>[n.id,crypto.randomUUID()]));for(const n of nodes){const copy:SceneNode={...n,position:[...n.position],rotation:[...n.rotation],scale:[...n.scale],tags:[...n.tags]};copy.id=mapping.get(n.id)!;copy.name=n.id===root.id?`${n.name} 副本`:n.name;if(n.parentId&&mapping.has(n.parentId))copy.parentId=mapping.get(n.parentId);project.nodes.push(copy);}created.push(mapping.get(root.id)!);}
  return created;
 }
 /** A subtree containing a locked node is kept intact. */

@@ -1,7 +1,7 @@
 import type {ResourceLimits} from './resource-limits';
 export type Vec3 = [number, number, number];
-export interface VoxelAsset { id: string; name: string; dimensions: Vec3; voxelSize: number; origin: Vec3; cells: Record<string,string>; sourceId?: string; resolution?: number; }
-export interface SceneNode { id: string; name: string; assetId?: string; parentId?: string; kind: 'mesh'|'group'|'spawn'|'trigger'; position: Vec3; rotation: Vec3; scale: Vec3; visible: boolean; locked: boolean; tags: string[]; }
+export interface VoxelAsset { id: string; name: string; dimensions: Vec3; voxelSize: number; origin: Vec3; cells: Record<string,string>; instanceOnly?: boolean; sourceId?: string; resolution?: number; }
+export interface SceneNode { id: string; name: string; assetId?: string; prefabAssetId?: string; parentId?: string; kind: 'mesh'|'group'|'spawn'|'trigger'; position: Vec3; rotation: Vec3; scale: Vec3; visible: boolean; locked: boolean; tags: string[]; }
 export interface SourceFile {name:string; data:string; encoding?:'gzip-base64';}
 export interface ModelSource {id:string; name:string; files:SourceFile[];}
 export interface Project {schemaVersion:1; id:string; name:string; assets:VoxelAsset[]; nodes:SceneNode[]; sources:ModelSource[]; updatedAt:string;}

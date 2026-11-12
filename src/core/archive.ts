@@ -25,6 +25,7 @@ export function validateProject(value: unknown, limits: ResourceLimits = getReso
     assert(a && typeof a.id === 'string' && !ids.has(a.id), 'Duplicate asset');
     ids.add(a.id);
     assert(typeof a.name === 'string' && vector(a.dimensions) && a.dimensions.every(n => Number.isSafeInteger(n) && n > 0 && n <= 512) && vector(a.origin) && Number.isFinite(a.voxelSize) && a.voxelSize > 0, 'Invalid asset');
+    assert(a.instanceOnly === undefined || typeof a.instanceOnly === 'boolean', 'Invalid instance asset flag');
     assert(a.cells && typeof a.cells === 'object' && !Array.isArray(a.cells), 'Invalid cells');
     for (const key in a.cells) {
       if (!Object.hasOwn(a.cells, key)) continue;
@@ -37,6 +38,7 @@ export function validateProject(value: unknown, limits: ResourceLimits = getReso
   for (const n of p.nodes) {
     assert(n && typeof n.id === 'string' && !nodes.has(n.id) && typeof n.name === 'string' && ['mesh', 'group', 'spawn', 'trigger'].includes(n.kind) && vector(n.position) && vector(n.rotation) && vector(n.scale) && typeof n.visible === 'boolean' && typeof n.locked === 'boolean' && Array.isArray(n.tags) && n.tags.every(t => typeof t === 'string'), 'Invalid or duplicate node');
     assert(n.assetId === undefined || typeof n.assetId === 'string' && ids.has(n.assetId), 'Missing asset');
+    assert(n.prefabAssetId === undefined || (n.kind === 'mesh' && typeof n.prefabAssetId === 'string' && ids.has(n.prefabAssetId) && !!n.assetId && n.prefabAssetId !== n.assetId), 'Missing or invalid prefab');
     assert(n.parentId === undefined || typeof n.parentId === 'string', 'Invalid parent');
     nodes.set(n.id, n);
   }

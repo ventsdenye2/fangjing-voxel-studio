@@ -1,0 +1,19 @@
+import {describe,it,expect} from 'vitest';
+import {produce} from 'immer';
+import {createDemo} from '../src/core/demo';
+import {editingAssetId,editVoxels} from '../src/core/voxel-edit';
+import {encodeProject,decodeProject} from '../src/core/archive';
+import {duplicateNodes} from '../src/core/scene-ops';
+import {ProjectHistory} from '../src/core/history';
+function fixture(){const p=createDemo();const n=p.nodes.find(n=>n.id==='node-tree')!;p.nodes.push({...structuredClone(n),id:'tree2'});return p;}
+const paint=(p:ReturnType<typeof fixture>,nodeId:string,mode:'scene'|'voxel',color:string)=>{const n=p.nodes.find(n=>n.id===nodeId)!;const a=p.assets.find(a=>a.id===editingAssetId(n,mode))!;return {...a.cells,'5,0,5':color};};
+describe('module edit scope',()=>{
+ it('edits the prefab for all untouched instances in model mode',()=>{const p=fixture();editVoxels(p,'node-tree','voxel',paint(p,'node-tree','voxel','#ff0000'));expect(p.nodes.find(n=>n.id==='tree2')!.assetId).toBe('demo-tree');expect(p.assets.find(a=>a.id==='demo-tree')!.cells['5,0,5']).toBe('#ff0000');expect(p.assets).toHaveLength(4);});
+ it('isolates scene painting, retaining the original prefab even with one instance',()=>{const p=createDemo(),original=structuredClone(p.assets.find(a=>a.id==='demo-tree')!);editVoxels(p,'node-tree','scene',paint(p,'node-tree','scene','#ff0000'));const n=p.nodes.find(n=>n.id==='node-tree')!;expect(n.prefabAssetId).toBe('demo-tree');expect(n.assetId).not.toBe('demo-tree');expect(p.assets.find(a=>a.id==='demo-tree')).toEqual(original);expect(editingAssetId(n,'voxel')).toBe('demo-tree');editVoxels(p,n.id,'scene',paint(p,n.id,'scene','#0000ff'));expect(p.assets).toHaveLength(5);});
+ it('keeps overrides when the original prefab changes, including after save/open',()=>{let p=fixture();editVoxels(p,'node-tree','scene',paint(p,'node-tree','scene','#ff0000'));p=decodeProject(encodeProject(p));editVoxels(p,'node-tree','voxel',paint(p,'node-tree','voxel','#00ff00'));const a=p.nodes.find(n=>n.id==='node-tree')!,b=p.nodes.find(n=>n.id==='tree2')!;expect(p.assets.find(x=>x.id===a.assetId)!.cells['5,0,5']).toBe('#ff0000');expect(p.assets.find(x=>x.id===b.assetId)!.cells['5,0,5']).toBe('#00ff00');});
+ it('isolates a duplicate of an already edited scene instance',()=>{const p=fixture();editVoxels(p,'node-tree','scene',paint(p,'node-tree','scene','#ff0000'));const [copyId]=duplicateNodes(p,['node-tree']);editVoxels(p,copyId,'scene',paint(p,copyId,'scene','#0000ff'));const a=p.nodes.find(n=>n.id==='node-tree')!,b=p.nodes.find(n=>n.id===copyId)!;expect(a.assetId).not.toBe(b.assetId);expect(b.prefabAssetId).toBe('demo-tree');expect(p.assets.find(x=>x.id===a.assetId)!.cells['5,0,5']).toBe('#ff0000');});
+ it('supports scene deletion, undo and redo as one operation',()=>{const p=fixture(),history=new ProjectHistory();const next=produce(p,draft=>{const cells=paint(p,'node-tree','scene','#ff0000');delete cells['5,0,5'];editVoxels(draft,'node-tree','scene',cells);});history.push(p);expect(next.assets).toHaveLength(5);const undone=history.undo(next)!;expect(undone).toEqual(p);expect(history.redo(undone)).toEqual(next);});
+ it('does not detach for identical cells or locked objects',()=>{const p=fixture();const cells={...p.assets.find(a=>a.id==='demo-tree')!.cells};expect(editVoxels(p,'node-tree','scene',cells)).toBe(false);p.nodes.find(n=>n.id==='node-tree')!.locked=true;expect(editVoxels(p,'node-tree','scene',paint(p,'node-tree','scene','#ff0000'))).toBe(false);expect(p.assets).toHaveLength(4);});
+});
+
+it('duplicates and edits through the actual Immer commit path',()=>{const p=fixture();let id='';const copied=produce(p,draft=>{[id]=duplicateNodes(draft,['node-tree']);});const edited=produce(copied,draft=>{editVoxels(draft,id,'scene',paint(copied,id,'scene','#123456'));});expect(edited.nodes).toHaveLength(6);expect(edited.nodes.find(n=>n.id===id)!.prefabAssetId).toBe('demo-tree');expect(p.nodes).toHaveLength(5);});

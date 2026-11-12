@@ -9,7 +9,7 @@ const Editor=memo(App);
 const lessons=[
  {name:'导入模型',title:'从左侧资产库导入模型',description:'点击左侧“导入模型”。正式使用时，在这里选择 GLB，或同时选择 OBJ、MTL 和贴图。本教程会自动载入内置的树样例。',hint:'请点击高亮的“导入模型”按钮。',targets:['.asset-actions > button']},
  {name:'转换体素',title:'转换入口就在视口底部',description:'源模型出现后，在底部预览栏选择分辨率，再点“转换为体素”。网页不能运行本地 binvox，本步载入预制样例；改变档位不会改变这个教学样例。',hint:'试选一个分辨率，再点击“转换为体素”。',targets:['.import-preview']},
- {name:'修整体素',title:'在右侧选笔刷，在中央改模型',description:'点击右侧“涂色”，会切换到“模型”模式。再点击树上的方块，真正改变它的颜色。增加、删除、吸色和撤销也与桌面版相同。',hint:'点击“涂色”，然后在中央树模型上涂一格。',targets:['.brush-buttons','.color-field','.swatches','.viewport']},
+ {name:'修整体素',title:'在右侧选笔刷，在中央改模型',description:'先点击视口上方“模型”，进入预制体编辑；再点击右侧“涂色”，在树上改一格颜色。模型模块会修改预制体；关卡模块的笔刷只修改当前物件。',hint:'切换到“模型”，点击“涂色”，再在中央树模型上涂一格。',targets:['.viewport-toolbar .segmented:first-child','.brush-buttons','.color-picker','.swatches','.viewport']},
  {name:'摆放场景',title:'回到关卡，调整物件变换',description:'先点击视口上方“关卡”，再用移动工具拖动轴，或修改右侧“位置 X”。旋转、缩放也在原来的工具栏与属性面板里。缩放会同时改变方块大小。',hint:'切换到“关卡”，修改位置 X 或拖动移动轴。',targets:['.canvas-panel','.right-panel .inspector-section:first-of-type']},
  {name:'保存工程',title:'顶部“保存”下载可编辑工程',description:'点击右上角“保存”，下载当前练习的真实 .vxlproj 工程。它可以在方境桌面版重新打开。本教程不读写桌面版草稿，刷新网页会重新开始练习。',hint:'点击顶部“保存”，下载练习工程。',targets:['header nav button:nth-child(3)']},
  {name:'导出天工',title:'按真实交付菜单导出',description:'点击顶部“导出天工”，再选“天工 0.4.19 交付包”。工程包、GLB 和天工 Pack 是三个独立导出选项；交付时建议同时保存工程包与天工包。',hint:'打开导出菜单，再下载“天工 0.4.19 交付包”。',targets:['header nav button:nth-child(4)']}
