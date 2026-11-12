@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, Menu } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -80,6 +80,11 @@ app.whenReady().then(async () => {
   const entryURL = devURL || pathToFileURL(index).href;
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   window = new BrowserWindow({ width: 1440, height: 900, minWidth: 1000, minHeight: 650, title: 'Voxel Studio', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false } });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { role: 'fileMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+    { role: 'help', label: 'Help', submenu: [{ label: '使用教程', accelerator: 'F1', click: () => window?.webContents.send('desktop:show-help') }] }
+  ]));
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
