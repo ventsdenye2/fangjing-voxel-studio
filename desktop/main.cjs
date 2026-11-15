@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, Menu, shell, net } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -7,11 +7,20 @@ const { createConverter } = require('./binvox.cjs');
 const { isLocalResourceURL } = require('./resource-policy.cjs');
 const { execFile } = require('node:child_process');
 const { normalizeResourceLimits } = require('./resource-limits.cjs');
+const { projectOpenOptions, chooseOutputPath } = require('./file-dialogs.cjs');
+const { createUpdates } = require('./updates.cjs');
 const converter = createConverter();
+const { projectArguments, readProjectFile } = require('./project-open.cjs');
 let window;
+const pendingProjects = projectArguments(process.argv, process.cwd(), !!process.defaultApp);
+function queueProjects(files) {
+  pendingProjects.push(...files);
+  if (files.length && window) window.webContents.send('desktop:project-available');
+}
+app.on('open-file', (event, file) => { event.preventDefault(); queueProjects([file]); });
 const hasInstanceLock=app.requestSingleInstanceLock();
 if(!hasInstanceLock)app.quit();
-else app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
+else app.on('second-instance',(_event,argv,cwd)=>{queueProjects(projectArguments(argv,cwd,!!process.defaultApp));if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
 let settings = { binvoxPath: '', resourceLimits: normalizeResourceLimits() };
 function effectiveBinvox() {
   if (settings.binvoxPath) return { binvoxPath: settings.binvoxPath, source: 'custom', architecture: 'custom' };
@@ -100,6 +109,20 @@ app.whenReady().then(async () => {
     } catch {}
     callback({ cancel: !allowed });
   });
+  const updates = createUpdates({
+    app, updater: require('electron-updater').autoUpdater,
+    fetch: (url, options) => net.fetch(url, options),
+    openExternal: url => shell.openExternal(url),
+    notify: state => { if(window&&!window.isDestroyed())window.webContents.send('desktop:update-state',state); }
+  });
+  register('desktop:update-state', () => updates.getState());
+  register('desktop:update-check', () => updates.check());
+  register('desktop:update-download', () => updates.download());
+  register('desktop:update-install', () => updates.install());
+  register('desktop:update-downloads', () => updates.openDownloads());
+  const updateTimer=setTimeout(()=>void updates.check(),15000);
+  const updateInterval=setInterval(()=>void updates.check(),6*60*60*1000);
+  app.once('before-quit',()=>{clearTimeout(updateTimer);clearInterval(updateInterval);});
   register('desktop:settings', () => ({ binvoxPath: effectiveBinvox().binvoxPath, resourceLimits: { ...settings.resourceLimits } }));
   register('desktop:set-resource-limits', async limits => {
     const resourceLimits = normalizeResourceLimits(limits);
@@ -117,28 +140,26 @@ app.whenReady().then(async () => {
   });
   register('desktop:convert', request => converter.convert(effectiveBinvox().binvoxPath, request, settings.resourceLimits));
   register('desktop:cancel', () => converter.cancel());
+  register('desktop:take-pending-project', () => {
+    const selected = pendingProjects.shift();
+    return selected ? readProjectFile(selected, settings.resourceLimits.projectBytes) : null;
+  });
   register('desktop:open', async () => {
-    const result = await dialog.showOpenDialog(window, { properties: ['openFile'], filters: [{ name: 'Voxel Studio project', extensions: ['vxlproj'] }] });
+    const result = await dialog.showOpenDialog(window, projectOpenOptions);
     if (result.canceled) return null;
     const selected = result.filePaths[0];
-    if (path.extname(selected).toLowerCase() !== '.vxlproj') throw new Error('Choose a .vxlproj project');
-    const projectBytes = settings.resourceLimits.projectBytes;
-    if (projectBytes && (await fs.stat(selected)).size > projectBytes) throw new Error('Project exceeds the configured byte budget');
-    const data = await fs.readFile(selected);
-    if (projectBytes && data.byteLength > projectBytes) throw new Error('Project exceeds the configured byte budget');
-    if (data[0] !== 0x50 || data[1] !== 0x4b) throw new Error('Project must be a ZIP archive');
-    return { name: path.basename(selected), data };
+    return readProjectFile(selected, settings.resourceLimits.projectBytes);
   });
   register('desktop:save', async (name, data) => {
     if (typeof name !== 'string' || !name || name.length > 200 || /[\\/\x00-\x1f]/.test(name)) throw new Error('Invalid output filename');
     if (!(data instanceof Uint8Array)) throw new Error('Invalid output data');
     if (settings.resourceLimits.projectBytes && data.byteLength > settings.resourceLimits.projectBytes) throw new Error('Output exceeds the configured project byte budget');
-    const result = await dialog.showSaveDialog(window, { defaultPath: name });
-    if (result.canceled || !result.filePath) return false;
-    const temporary = path.join(path.dirname(result.filePath), '.voxel-studio-' + randomUUID() + '.tmp');
+    const filePath = await chooseOutputPath(dialog, window, name);
+    if (!filePath) return false;
+    const temporary = path.join(path.dirname(filePath), '.voxel-studio-' + randomUUID() + '.tmp');
     try {
       await fs.writeFile(temporary, data, { flag: 'wx' });
-      await fs.rename(temporary, result.filePath);
+      await fs.rename(temporary, filePath);
     } finally {
       await fs.rm(temporary, { force: true });
     }

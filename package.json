@@ -1,6 +1,6 @@
 {
   "name": "fangjing-voxel-studio",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "方境 · 体素资产与关卡编辑器",
@@ -12,16 +12,18 @@
     "test": "vitest run",
     "desktop": "electron .",
     "desktop:dev": "node scripts/dev-desktop.mjs",
-    "pack:win": "npm run build && electron-builder --win portable --x64",
+    "pack:win": "npm run build && electron-builder --win nsis --x64",
     "pack:mac": "npm run build && electron-builder --mac dmg --arm64",
     "build:tutorial": "tsc --noEmit && vite build --config vite.tutorial.config.ts"
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "fflate": "^0.8.2",
     "immer": "^11.2.10",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "semver": "^7.7.2",
     "three": "^0.180.0",
     "three-mesh-bvh": "^0.9.0"
   },
@@ -49,7 +51,7 @@
       "package.json"
     ],
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "extraResources": [
         {
           "from": "resources/binvox/win32-x64",
@@ -63,7 +65,8 @@
           "from": "resources/binvox/README.md",
           "to": "binvox/README.md"
         }
-      ]
+      ],
+      "artifactName": "Fangjing-Setup-${version}-${arch}.${ext}"
     },
     "mac": {
       "target": "dmg",
@@ -83,7 +86,30 @@
         }
       ]
     },
-    "compression": "normal"
+    "compression": "normal",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "fileAssociations": [
+      {
+        "ext": "vxlproj",
+        "name": "方境工程",
+        "description": "方境可编辑体素工程",
+        "role": "Editor"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ventsdenye2",
+        "repo": "fangjing-voxel-studio"
+      }
+    ]
   },
   "license": "MIT",
   "repository": {

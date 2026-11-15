@@ -18,11 +18,12 @@ jobs:
           - os: windows-latest
             script: pack:win
             artifact: windows-x64
-            pattern: release/*.exe
-          - os: macos-15
-            script: pack:mac
-            artifact: macos-arm64
-            pattern: release/*.dmg
+            pattern: |
+              release/*.exe
+              release/*.blockmap
+              release/latest.yml
+              release/alpha.yml
+              release/beta.yml
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -38,9 +39,6 @@ jobs:
       - name: Match application version to tag
         shell: bash
         run: npm pkg set version="${GITHUB_REF_NAME#v}"
-      - name: Mark macOS helper executable
-        if: runner.os == 'macOS'
-        run: chmod 755 resources/binvox/darwin-x64/binvox
       - name: Package desktop
         run: npm run ${{ matrix.script }} -- --publish never
       - uses: actions/upload-artifact@v4
@@ -71,9 +69,11 @@ jobs:
           prerelease=false
           if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=true; fi
           cat > release-notes.md <<'NOTES'
-          Windows x64 portable executable and macOS Apple Silicon disk image.
+          Windows x64 installer with .vxlproj file association and in-app updates.
 
-          These builds are unsigned. The macOS package has not yet been verified on a physical Mac. Unmodified binvox is bundled with its redistribution license and notices. Apple Silicon uses the bundled x86_64 binvox through Rosetta 2. Private source model assets are excluded.
+          Save your project before installing. Existing portable users must install this version once; subsequent updates are available in Settings. macOS remains available separately in the alpha.8 prerelease.
+
+          The Windows installer is unsigned. Unmodified binvox is bundled with its redistribution license and notices. Private source model assets are excluded.
           NOTES
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft --title "方境 Voxel Studio $RELEASE_TAG" --notes-file release-notes.md

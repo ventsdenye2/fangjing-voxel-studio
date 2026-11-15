@@ -31,3 +31,9 @@ The current host opens the packaged dist/index.html through file URLs. It uses s
 The current implementation does not register a custom application protocol. Its packaged file URL behavior still requires a launched packaged-app acceptance check. macOS signing, notarization and real-machine runtime acceptance remain unverified.
 
 The first alpha.1 release attempt could not schedule macos-14 because that runner was retired. Alpha.2 uses macos-15. Local Windows builds can reuse an installed runtime with npx electron-builder --win portable --x64 --publish never -c.electronDist=node_modules/electron/dist when the download cache is unavailable.
+
+## v0.1.0 Windows 安装版
+
+Windows 改为 NSIS 按用户安装，不再产出 portable。使用 npm run pack:win，发布需同时上传 Fangjing-Setup-<version>-x64.exe、对应 .blockmap 和 latest.yml。electron-updater 从本仓库 GitHub Releases 获取版本和 SHA-512 校验信息。不要只上传 EXE，也不要修改元数据中的文件名。
+
+正式标签 v0.1.0 的发布工作流仅生成 Windows 安装包；Mac 保持 alpha.8 的独立预发布。Mac 自动安装更新需要签名及配套更新包，当前只提供新版检查与手动下载。构建安装包不等于验证跨版本安装；每次发布应检查实际安装、文件关联及更新行为。

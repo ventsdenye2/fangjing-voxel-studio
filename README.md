@@ -6,7 +6,7 @@
 
 [下载安装包](https://github.com/ventsdenye2/fangjing-voxel-studio/releases) · [交互教程](https://ventsdenye2.github.io/fangjing-voxel-studio/) · [美术使用指南](docs/ARTIST-GUIDE.md)
 
-当前为 Alpha 预发布版本。Windows 的模型转换、编辑、保存和天工导入流程已验证；macOS 尚未完成真机验证，持续帧率与峰值内存也仍待测试。具体进展见 [开发记录](docs/DEVELOPMENT.md)。
+Windows v0.1.0 为安装版，支持工程文件关联和软件内更新。macOS 仍使用独立的 Alpha 预发布版本，尚未完成真机验证。Windows 的模型转换、编辑、保存和天工导入流程已验证；持续帧率与峰值内存仍待测试。具体进展见 [开发记录](docs/DEVELOPMENT.md)。
 
 ## 工作流
 

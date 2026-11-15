@@ -3,7 +3,7 @@ import type {TutorialAdapter} from './tutorial/contract';
 import {produce,setAutoFreeze} from 'immer';
 setAutoFreeze(false);
 import {Box,FolderOpen,Save,FilePlus,Download,Upload,Undo2,Redo2,Move,RotateCw,Maximize,Magnet,Grid2X2,Focus,Plus,Minus,Paintbrush,Pipette,Eye,EyeOff,Lock,Unlock,Copy,Trash2,Layers,Settings,X,Check,MousePointer2,Flag,Package,ChevronDown,ArrowDownToLine,CircleHelp} from 'lucide-react';
-import type {Project,SceneNode,VoxelAsset,Vec3} from './core/types';
+import type {Project,SceneNode,VoxelAsset,Vec3,UpdateState} from './core/types';
 import {createDemo,createEmpty,uid} from './core/demo';
 import {assetStats} from './core/asset-stats';
 import {ProjectHistory} from './core/history';
@@ -21,6 +21,7 @@ import ResourceSettings from './components/ResourceSettings';
 import VirtualList from './components/VirtualList';
 import {editingAssetId,editVoxels} from './core/voxel-edit';
 import Help from './components/Help';
+import UpdatePanel from './components/UpdatePanel';
 import ColorPicker from './components/ColorPicker';
 import {rememberColor,readColorHistory} from './core/color';
 import {getResourceLimits,setResourceLimits,assertBudget} from './core/resource-limits';
@@ -31,6 +32,11 @@ async function output(name:string,bytes:Uint8Array){if(window.desktop)return awa
 export default function App({tutorial}:{tutorial?:TutorialAdapter}={}){
  const [project,setProject]=useState<Project>(createDemo),[selection,setSelection]=useState<string[]>(['node-stairs']);
  const [mode,setMode]=useState<'scene'|'voxel'>('scene'),[tool,setTool]=useState<'translate'|'rotate'|'scale'>('translate'),[brush,setBrush]=useState<'add'|'remove'|'paint'|'pick'>('paint');
+ const [updateState,setUpdateState]=useState<UpdateState|null>(null);
+ useEffect(()=>{const off=window.desktop?.onUpdateState?.(setUpdateState);void window.desktop?.getUpdateState?.().then(setUpdateState).catch(()=>{});return off;},[]);
+ const [booted,setBooted]=useState(false),[externalTick,setExternalTick]=useState(0);
+ const projectEpoch=useRef(0),externalOpening=useRef(false),handledExternalTick=useRef(-1);
+ useEffect(()=>window.desktop?.onProjectAvailable?.(()=>setExternalTick(v=>v+1)),[]);
  const [sceneBrush,setSceneBrush]=useState(false),[help,setHelp]=useState(false);
  const [color,setColor]=useState('#a5e3bb'),[brushSize,setBrushSize]=useState(1),[snap,setSnap]=useState(true),[ortho,setOrtho]=useState(false),[focusTick,focus]=useState(0);
  const [status,setStatus]=useState('示例工程 · 可直接编辑'),[error,setError]=useState(''),[busy,setBusy]=useState(''),[resolution,setResolution]=useState<32|64|128|256|512>(64);
@@ -46,17 +52,58 @@ export default function App({tutorial}:{tutorial?:TutorialAdapter}={}){
  const prefabs=project.assets.filter(a=>!a.instanceOnly);
  const selectionLocked=selected?isEffectivelyLocked(project,selected.id):false;
  const commit=(fn:(p:Project)=>void)=>{const old=current.current;const next=produce(old,p=>{fn(p as Project);p.updatedAt=new Date().toISOString();});history.current.push(old);current.current=next;setProject(next);setStatus(tutorial?'教程编辑已更新 · 请保存工程包以保留修改':'正在保存草稿…');};
- const replace=(p:Project,validated=false)=>{if(!validated)validateProject(p);ready.current=true;history.current.clear();setProject(p);current.current=p;setSelection([]);setMode('scene');setSceneBrush(false);setImported(null);focus(v=>v+1);};
+ const replace=(p:Project,validated=false)=>{if(!validated)validateProject(p);projectEpoch.current++;setDraft(null);setAssetFilter('');ready.current=true;setStatus('已打开工程：'+p.name);history.current.clear();setProject(p);current.current=p;setSelection([]);setMode('scene');setSceneBrush(false);setImported(null);focus(v=>v+1);};
  const update=(updates:Partial<SceneNode>[])=>{if(!updates.length)return;if(updates.some(u=>u.position||u.rotation||u.scale))tutorial?.onAction('transform');commit(p=>{for(const u of updates){const n=p.nodes.find(n=>n.id===u.id);if(n&&!isEffectivelyLocked(p,n.id))Object.assign(n,u);}});};
  const undo=()=>{const p=history.current.undo(current.current);if(p){setProject(p);current.current=p;setStatus('已撤销');}};
  const redo=()=>{const p=history.current.redo(current.current);if(p){setProject(p);current.current=p;setStatus('已重做');}};
  const save=()=>task('保存工程包…',async()=>{cancel.current=new AbortController();if(await output(project.name+'.vxlproj',await exportInBackground(project,'project',cancel.current.signal))){setStatus('工程包已保存');tutorial?.onAction('save');}});
  const remove=()=>{commit(p=>removeNodes(p,selection));setSelection([]);};
  const duplicate=()=>{let ids:string[]=[];commit(p=>{ids=duplicateNodes(p,selection);});if(ids.length)setSelection(ids);};
- useEffect(()=>{if(tutorial){ready.current=true;return;}void(async()=>{try{if(window.desktop){const settings=await window.desktop.getSettings();setBinvox(settings.binvoxPath);updateLimits(setResourceLimits(settings.resourceLimits));}const saved=await loadDraft();if(saved){validateProject(saved);setDraft(saved);}ready.current=true;}catch(e){ready.current=false;setError('草稿或设置读取失败：'+String(e)+'。已保留原草稿，请调整容量设置重试，或打开已保存工程。');}})();window.desktop?.checkBinvox().then(s=>{setBinvoxStatus(s.message);if(!s.available)setSettings(true);}).catch(e=>setBinvoxStatus(String(e)));},[]);
+ useEffect(()=>{
+  if(tutorial){ready.current=true;setBooted(true);return;}
+  const epoch=projectEpoch.current;
+  void(async()=>{try{
+   if(window.desktop){const settings=await window.desktop.getSettings();setBinvox(settings.binvoxPath);updateLimits(setResourceLimits(settings.resourceLimits));}
+   const file=await window.desktop?.takePendingProject?.();
+   if(file){
+    setBusy('打开指定工程…');
+    const loaded=await openProjectInBackground(file.data);
+    if(projectEpoch.current===epoch)replace(loaded,true);
+   }else{
+    const saved=await loadDraft();
+    if(projectEpoch.current!==epoch)return;
+    if(saved){validateProject(saved);setDraft(saved);}
+    ready.current=true;
+   }
+  }catch(e){
+   if(projectEpoch.current===epoch){ready.current=false;setError('启动读取失败：'+String(e)+'。未加载指定文件，请使用顶部“打开”重试；原文件和草稿未被替换。');}
+  }finally{setBusy('');setBooted(true);}})();
+  window.desktop?.checkBinvox().then(s=>{setBinvoxStatus(s.message);if(!s.available)setSettings(true);}).catch(e=>setBinvoxStatus(String(e)));
+ },[]);
  useEffect(()=>{if(tutorial)return;const t=setTimeout(()=>{if(ready.current&&!draft)saveDraft(project).then(()=>setStatus('草稿已自动保存')).catch(e=>setStatus('自动保存失败（'+(e instanceof Error?e.message:String(e))+'），请保存工程包'));},1200);return()=>clearTimeout(t);},[project,draft]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if(e.key==='F1'){e.preventDefault();setHelp(true);return;}if(help){if(e.key==='Escape')setHelp(false);return;}if((e.target as HTMLElement).matches('input,textarea,select'))return;if(e.ctrlKey||e.metaKey){if(e.key==='s'){e.preventDefault();void save();}if(e.key==='z'){e.preventDefault();e.shiftKey?redo():undo();}if(e.key==='y'){e.preventDefault();redo();}if(e.key==='d'){e.preventDefault();if(mode==='scene')duplicate();}}else if(e.key==='Delete'&&mode==='scene')remove();else if(e.key.toLowerCase()==='f')focus(v=>v+1);};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);});
  const task=async(label:string,fn:()=>Promise<void>)=>{if(busy)return;setError('');setBusy(label);try{await fn();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy('');}};
+ useEffect(()=>{
+  if(!booted||busy||externalOpening.current||handledExternalTick.current===externalTick||!window.desktop?.takePendingProject)return;
+  handledExternalTick.current=externalTick;
+  externalOpening.current=true;
+  let received=false;
+  void task('检查待打开工程…',async()=>{
+   const file=await window.desktop!.takePendingProject!();
+   if(!file)return;
+   received=true;
+   if(!confirm('打开「'+file.name+'」将替换当前画面。未导出的修改可先取消并保存。继续打开？'))return;
+   cancel.current=new AbortController();
+   replace(await openProjectInBackground(file.data,cancel.current.signal),true);
+  }).finally(()=>{externalOpening.current=false;if(received)setExternalTick(v=>v+1);});
+ },[booted,externalTick,busy]);
+ const installUpdate=()=>task('保存工程并准备更新…',async()=>{
+  cancel.current=new AbortController();
+  const snapshot=current.current;
+  const bytes=await exportInBackground(snapshot,'project',cancel.current.signal);
+  if(!await output(snapshot.name+'.vxlproj',bytes)){setStatus('已取消更新：工程尚未保存');return;}
+  await window.desktop?.installUpdate?.();
+ });
  const addAsset=(a:VoxelAsset,source?:Project['sources'][number])=>{const n=meshNode(a);commit(p=>{p.assets.push(a);p.nodes.push(n);if(source&&!p.sources.some(s=>s.id===source.id))p.sources.push(source);});setSelection([n.id]);setMode('scene');setSceneBrush(false);setImported(null);focus(v=>v+1);};
  const importFiles=(files:File[])=>task('读取模型与贴图…',async()=>{if(files.length===1&&files[0].name.toLowerCase().endsWith('.zip')){assertBudget(files[0].size,getResourceLimits().sourceBytes,'导入 ZIP 大小（字节）');const buffer=await files[0].arrayBuffer();let sum=0;const entries=unzipSync(new Uint8Array(buffer),{filter:e=>{sum+=e.originalSize;assertBudget(sum,getResourceLimits().sourceBytes,'导入 ZIP 解压大小（字节）');return !e.name.endsWith('/');}});files=Object.entries(entries).map(([name,bytes])=>new File([bytes as BlobPart],name));}const b=files.find(f=>f.name.toLowerCase().endsWith('.binvox'));if(b){addAsset(await parseBinvoxAsync(new Uint8Array(await b.arrayBuffer()),b.name.replace(/\.binvox$/i,'')));return;}const model=await importModel(files);setImported(model);tutorial?.onAction('import');if(model.warnings.length)setError(model.warnings.join('；'));focus(v=>v+1);});
  const convert=()=>task('binvox 转换与颜色采样…',async()=>{if(!imported)return;if(tutorial){const a=tutorial.convertExample();a.sourceId=imported.source.id;addAsset(a,imported.source);setStatus('教程：已载入预制体素样例，未运行 binvox；分辨率档位不改变此样例');tutorial.onAction('convert');return;}if(!window.desktop)throw Error('浏览器预览支持编辑和导出；运行 binvox 请打开桌面版。也可以导入已有 .binvox 文件。');if(!binvox){setSettings(true);throw Error('请先在设置中选择官方 binvox 可执行文件。');}cancel.current=new AbortController();const r=await window.desktop.convert({obj:imported.obj,resolution});cancel.current.signal.throwIfAborted();let a=await parseBinvoxAsync(new Uint8Array(r.data),imported.source.name,cancel.current.signal);a=await applySourceColors(a,imported.sampleColor,cancel.current.signal);a.sourceId=imported.source.id;a.resolution=resolution;addAsset(a,imported.source);});
@@ -69,7 +116,7 @@ export default function App({tutorial}:{tutorial?:TutorialAdapter}={}){
  const select=(id:string|null,multi=false)=>{setSelection(id?(multi?selection.includes(id)?selection.filter(v=>v!==id):[...selection,id]:[id]):[]);};
  const renderField=(field:'position'|'rotation'|'scale',title:string)=><div className="transform-field"><span>{title}</span><div>{(['X','Y','Z'] as const).map((axis,i)=><label key={axis}><small>{axis}</small><input aria-label={title+' '+axis} type="number" step={field==='rotation'?15:.25} disabled={selectionLocked} value={selected?.[field][i]??0} onChange={e=>{if(!selected)return;const v=Number(e.target.value);if(!Number.isFinite(v)||(field==='scale'&&v<=0))return;const vec=[...selected[field]] as Vec3;if(field==='scale')vec.fill(v);else vec[i]=v;update([{id:selected.id,[field]:vec}]);}}/></label>)}</div></div>;
  return <div className="app-shell">
- <header><div className="brand"><Box/><strong>方境 <span>Voxel Studio</span></strong></div><input className="project-name" aria-label="工程名称" value={project.name} onChange={e=>commit(p=>{p.name=e.target.value;})}/><nav><button onClick={()=>{if(confirm('新建空白工程？当前工程请先保存。'))replace(createEmpty());}}><FilePlus/>新建</button><button onClick={()=>void open()}><FolderOpen/>打开</button><button onClick={()=>void save()}><Save/>保存</button><button className="primary" onClick={()=>setExportOpen(true)}><Download/>导出天工</button><button className="icon-button" aria-label="设置" onClick={()=>setSettings(true)}><Settings/></button><button aria-label="Help 使用教程" onClick={()=>setHelp(true)}><CircleHelp/>Help</button></nav></header>
+ <header><div className="brand"><Box/><strong>方境 <span>Voxel Studio</span></strong></div><input className="project-name" aria-label="工程名称" value={project.name} onChange={e=>commit(p=>{p.name=e.target.value;})}/><nav><button onClick={()=>{if(confirm('新建空白工程？当前工程请先保存。'))replace(createEmpty());}}><FilePlus/>新建</button><button onClick={()=>void open()}><FolderOpen/>打开</button><button onClick={()=>void save()}><Save/>保存</button><button className="primary" onClick={()=>setExportOpen(true)}><Download/>导出天工</button><button className="icon-button" aria-label="设置" onClick={()=>setSettings(true)}><Settings/></button><button aria-label="Help 使用教程" onClick={()=>setHelp(true)}><CircleHelp/>Help</button>{updateState&&['available','downloaded'].includes(updateState.status)&&<button onClick={()=>setSettings(true)}><Download/>{updateState.status==='downloaded'?'更新已就绪':'发现新版'}</button>}</nav></header>
  <main><aside className="left-panel"><div className="panel-title"><Package/>资产库 <span>{prefabs.length}</span></div><div className="asset-actions"><button className="outline" onClick={()=>{if(tutorial)void tutorial.loadExample().then(importFiles).catch(e=>setError(String(e)));else input.current?.click();}}><Upload/>导入模型</button><input placeholder="查找资产…" aria-label="查找资产" value={assetFilter} onChange={e=>setAssetFilter(e.target.value)}/></div><VirtualList className="asset-list" itemHeight={61} items={prefabs.filter(a=>a.name.includes(assetFilter))} activeId={selected?.prefabAssetId??asset?.id} renderItem={a=><button key={a.id} className={'asset-row '+(asset?.id===a.id?'active':'')} draggable onDragStart={e=>e.dataTransfer.setData('assetId',a.id)} onDoubleClick={()=>{const n=meshNode(a);commit(p=>p.nodes.push(n));setSelection([n.id]);}} onClick={()=>{const n=project.nodes.find(n=>(mode==='voxel'?(n.prefabAssetId??n.assetId):n.assetId)===a.id)||project.nodes.find(n=>n.prefabAssetId===a.id);if(n)select(n.id);}}><span className="asset-icon" style={{color:assetStats(a).firstColor}}><Box/></span><span>{a.name}<small>{assetStats(a).count.toLocaleString()} 体素</small></span><Plus size={14} onClick={e=>{e.stopPropagation();const n=meshNode(a);commit(p=>p.nodes.push(n));setSelection([n.id]);}}/></button>}/>
  <div className="panel-title scene-title"><Layers/>场景树<span>{project.nodes.length}</span></div><div className="tree-actions"><button title="将所选根物件分组" onClick={group}><Layers/>分组</button><button title="解散所选分组" onClick={ungroup}><Layers/>解组</button><button title="添加出生点" onClick={()=>marker('spawn')}><Flag/></button><button title="添加触发区域" onClick={()=>marker('trigger')}><Box/></button></div><VirtualList className="scene-tree" itemHeight={37} items={project.nodes} activeId={selection[0]} renderItem={n=><div className={'tree-row '+(selection.includes(n.id)?'selected':'')} key={n.id} style={{paddingLeft:n.parentId?24:10}}><button className="tree-label" onClick={e=>select(n.id,e.shiftKey)}>{n.kind==='group'?<Layers/>:n.kind==='spawn'?<Flag/>:<Box/>}<span>{n.name}</span></button><button title={n.visible?'隐藏':'显示'} onClick={()=>commit(p=>{p.nodes.find(v=>v.id===n.id)!.visible=!n.visible;})}>{n.visible?<Eye/>:<EyeOff/>}</button><button title={n.locked?'解锁':'锁定'} onClick={()=>commit(p=>{p.nodes.find(v=>v.id===n.id)!.locked=!n.locked;})}>{n.locked?<Lock/>:<Unlock/>}</button></div>}/><div className="left-footer"><button onClick={()=>{replace(createDemo());setSelection(['node-stairs']);}}>打开示例关卡</button></div></aside>
  <section className="canvas-panel" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const a=project.assets.find(a=>a.id===e.dataTransfer.getData('assetId'));if(a){const n=meshNode(a);commit(p=>p.nodes.push(n));setSelection([n.id]);}else if(e.dataTransfer.files.length){if(tutorial)setError('教程仅使用内置树样例；真实模型转换请使用桌面版。');else void importFiles([...e.dataTransfer.files]);}}}><div className="viewport-toolbar"><div className="segmented"><button className={mode==='scene'?'active':''} onClick={()=>{setMode('scene');setSceneBrush(false);}}><Box/>关卡</button><button disabled={!asset} className={mode==='voxel'?'active':''} onClick={()=>{setMode('voxel');setSceneBrush(false);}}><Package/>模型</button></div><div className="segmented tool-modes">{([['translate',Move,'移动'],['rotate',RotateCw,'旋转'],['scale',Maximize,'缩放']] as const).map(([t,Icon,label])=><button key={t} title={label} disabled={mode==='voxel'} className={tool===t&&!sceneBrush&&mode==='scene'?'active':''} onClick={()=>{setTool(t);setSceneBrush(false);}}><Icon/><span>{label}</span></button>)}</div><button title="网格吸附 0.25 m / 15°" className={snap?'active':''} onClick={()=>setSnap(!snap)}><Magnet/></button><button title={ortho?'切换透视':'切换正交'} className={ortho?'active':''} onClick={()=>setOrtho(!ortho)}><Grid2X2/></button><button title="聚焦全部 F" onClick={()=>focus(v=>v+1)}><Focus/></button></div>
@@ -83,8 +130,8 @@ export default function App({tutorial}:{tutorial?:TutorialAdapter}={}){
  <input hidden multiple ref={input} type="file" accept=".glb,.obj,.mtl,.png,.jpg,.jpeg,.webp,.binvox,.zip" onChange={e=>{if(e.target.files)void importFiles([...e.target.files]);e.target.value='';}}/><input hidden ref={openInput} type="file" accept=".vxlproj,.zip" onChange={e=>{const f=e.target.files?.[0];if(f)void task('读取工程…',async()=>{cancel.current=new AbortController();assertBudget(f.size,getResourceLimits().projectBytes,'工程文件大小（字节）');replace(await openProjectInBackground(new Uint8Array(await f.arrayBuffer()),cancel.current.signal),true);});e.target.value='';}}/>
  {error&&<div className="toast" role="alert"><span>{error}</span><button aria-label="关闭错误" onClick={()=>setError('')}><X/></button></div>}
  {busy&&<div className="busy-overlay"><div><div className="spinner"/><strong>{busy}</strong><p>大模型可能需要更长时间，请稍候。</p>{(busy.includes('binvox')||busy.includes('交付')||busy.includes('保存')||busy.includes('工程'))&&<button onClick={()=>{cancel.current?.abort(new Error('转换已取消'));cancelVoxelProcessing();void window.desktop?.cancelConversion();}}>取消任务</button>}</div></div>}
- {draft&&<Modal title="发现上次的编辑草稿" onClose={()=>setDraft(null)}><p>恢复「{draft.name}」继续编辑，或使用当前示例开始。</p><div className="button-row"><button className="primary" onClick={()=>{replace(draft);setDraft(null);}}>恢复草稿</button><button onClick={()=>setDraft(null)}>使用当前工程</button></div></Modal>}
- {settings&&<Modal title="设置" onClose={()=>setSettings(false)}><p>安装包已内置 binvox，通常无需配置。转换完全在本机进行。</p><p className="readiness">{binvoxStatus}</p><label className="stack-label">binvox 路径<input readOnly value={binvox||'尚未配置'}/></label><button className="primary" disabled={!window.desktop} onClick={()=>void task('选择 binvox…',async()=>{const p=await window.desktop!.chooseBinvox();if(p){setBinvox(p);const check=await window.desktop!.checkBinvox();setBinvoxStatus(check.message);}})}>选择 binvox</button><p className="muted">{window.desktop?'Windows 选择 binvox.exe；Mac 选择有执行权限的 binvox。':'当前为网页预览，运行转换请使用桌面版。'}<br/>M 系列 Mac 使用官方 Intel 程序，需要 Rosetta 2。若内置程序不可用，可从 https://www.patrickmin.com/binvox/ 下载后点“选择 binvox”。</p><ResourceSettings value={limits} onSave={async value=>{const saved=window.desktop?await window.desktop.setResourceLimits(value):value;updateLimits(setResourceLimits(saved,true));if(!ready.current){const recovered=await loadDraft();if(recovered){validateProject(recovered);setDraft(recovered);}ready.current=true;setError('');}}}/></Modal>}
+ {draft&&<Modal title="发现上次的编辑草稿" onClose={()=>setDraft(null)}><p>恢复「{draft.name}」继续编辑，或保留当前画面。这里是本机自动草稿，不是从资源管理器选择的工程文件。</p><div className="button-row"><button className="primary" onClick={()=>{replace(draft);setDraft(null);}}>恢复草稿</button><button onClick={()=>setDraft(null)}>使用当前工程</button></div></Modal>}
+ {settings&&<Modal title="设置" onClose={()=>setSettings(false)}>{updateState&&<UpdatePanel state={updateState} busy={!!busy} onCheck={()=>void task('检查更新…',async()=>{await window.desktop?.checkForUpdates?.();})} onDownload={()=>void window.desktop?.downloadUpdate?.().catch(e=>setError(String(e)))} onInstall={()=>void installUpdate()} onDownloads={()=>void window.desktop?.openUpdateDownloads?.().catch(e=>setError(String(e)))}/>}<p>安装包已内置 binvox，通常无需配置。转换完全在本机进行。</p><p className="readiness">{binvoxStatus}</p><label className="stack-label">binvox 路径<input readOnly value={binvox||'尚未配置'}/></label><button className="primary" disabled={!window.desktop} onClick={()=>void task('选择 binvox…',async()=>{const p=await window.desktop!.chooseBinvox();if(p){setBinvox(p);const check=await window.desktop!.checkBinvox();setBinvoxStatus(check.message);}})}>选择 binvox</button><p className="muted">{window.desktop?'Windows 选择 binvox.exe；Mac 选择有执行权限的 binvox。':'当前为网页预览，运行转换请使用桌面版。'}<br/>M 系列 Mac 使用官方 Intel 程序，需要 Rosetta 2。若内置程序不可用，可从 https://www.patrickmin.com/binvox/ 下载后点“选择 binvox”。</p><ResourceSettings value={limits} onSave={async value=>{const saved=window.desktop?await window.desktop.setResourceLimits(value):value;updateLimits(setResourceLimits(saved,true));if(!ready.current){const recovered=await loadDraft();if(recovered){validateProject(recovered);setDraft(recovered);}ready.current=true;setError('');}}}/></Modal>}
  {help&&<Help onClose={()=>setHelp(false)}/>}
  {exportOpen&&<Modal title="导出与交付" onClose={()=>setExportOpen(false)}><p>保留独立物件与层级，继续在天工中搭建玩法。</p><button className="export-choice" onClick={()=>void exportFile('forgeax')}><Package/><span><strong>天工 0.4.19 交付包</strong><small>原生 Pack 作者源、标记与导入说明</small></span><Download/></button><button className="export-choice" onClick={()=>void exportFile('project')}><Save/><span><strong>可编辑工程包</strong><small>源模型、体素颜色、关卡与实例</small></span><Download/></button><button className="export-choice" onClick={()=>void exportFile('glb')}><Box/><span><strong>通用 GLB 场景</strong><small>模型节点与基础颜色，适合预览和交换</small></span><Download/></button><p className="muted">建议同时交付工程包与天工包。天工内的玩法改动不会反向同步到本工具。</p></Modal>}
  </div>;
