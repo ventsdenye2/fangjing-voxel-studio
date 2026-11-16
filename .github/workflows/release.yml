@@ -71,6 +71,8 @@ jobs:
           cat > release-notes.md <<'NOTES'
           Windows x64 installer with .vxlproj file association and in-app updates.
 
+          New in v0.1.1: select part of a voxel model with a movable, resizable 3D box, then split or copy it into an independent asset. Preserves world position, isolates the current instance, and supports undo/redo. In Scene mode, select a model and use the 3D box selection panel on the right.
+
           Save your project before installing. Existing portable users must install this version once; subsequent updates are available in Settings. macOS remains available separately in the alpha.8 prerelease.
 
           The Windows installer is unsigned. Unmodified binvox is bundled with its redistribution license and notices. Private source model assets are excluded.
