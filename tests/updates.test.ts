@@ -9,6 +9,36 @@ function setup(version='1.0.0',platform='win32',isPackaged=true){
  return {service,updater,fetch,openExternal,notify};
 }
 describe('safe installer updates',()=>{
+ it('replaces a cached intermediate installer with the newest release before installing',async()=>{
+  const {service,updater}=setup('1.0.0');
+  updater.emit('update-downloaded',{version:'1.0.1'});
+  updater.checkForUpdates.mockImplementation(()=>updater.emit('update-available',{version:'1.0.5'}));
+  updater.downloadUpdate.mockImplementation(()=>updater.emit('update-downloaded',{version:'1.0.5'}));
+  await service.install();
+  expect(service.getState().version).toBe('1.0.5');
+  expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
+  expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
+ });
+ it('refreshes a stale available release when download is clicked',async()=>{
+  const {service,updater}=setup();
+  updater.emit('update-available',{version:'1.0.1'});
+  updater.checkForUpdates.mockImplementation(()=>updater.emit('update-available',{version:'1.0.5'}));
+  updater.downloadUpdate.mockImplementation(()=>updater.emit('update-downloaded',{version:'1.0.5'}));
+  await service.download();expect(service.getState().version).toBe('1.0.5');
+ });
+ it('keeps the latest cached installer without downloading it again',async()=>{
+  const {service,updater}=setup();updater.emit('update-downloaded',{version:'1.0.5'});
+  updater.checkForUpdates.mockImplementation(()=>updater.emit('update-available',{version:'1.0.5'}));
+  expect((await service.check()).status).toBe('downloaded');
+  await service.install();expect(updater.downloadUpdate).not.toHaveBeenCalled();
+  expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
+ });
+ it('does not install an intermediate cached version when latest-version checking fails',async()=>{
+  const {service,updater}=setup();updater.emit('update-downloaded',{version:'1.0.1'});
+  updater.checkForUpdates.mockRejectedValue(Error('offline'));
+  await expect(service.install()).rejects.toThrow('最新版本');
+  expect(updater.quitAndInstall).not.toHaveBeenCalled();
+ });
  it('keeps stable users off prereleases and refuses downgrades',()=>{
   const {updater}=setup();expect(updater.autoDownload).toBe(false);expect(updater.autoInstallOnAppQuit).toBe(false);expect(updater.allowPrerelease).toBe(false);expect(updater.allowDowngrade).toBe(false);
   const releases=[{tag_name:'v0.9.0'},{tag_name:'v1.1.0-alpha.1',prerelease:true},{tag_name:'v1.0.1'},{tag_name:'v9.0.0',draft:true}];
@@ -16,14 +46,15 @@ describe('safe installer updates',()=>{
   expect(latestRelease(releases,'1.0.0-alpha.9').tag_name).toBe('v1.1.0-alpha.1');
  });
  it('requires a completed download before installation and reports progress',async()=>{
-  const {service,updater}=setup();expect(()=>service.install()).toThrow('尚未下载');
+  const {service,updater}=setup();await expect(service.install()).rejects.toThrow('尚未下载');
   await service.download();expect(updater.downloadUpdate).not.toHaveBeenCalled();
+  updater.checkForUpdates.mockImplementation(()=>updater.emit('update-available',{version:'1.0.1'}));
   updater.emit('update-available',{version:'1.0.1'});await service.download();
   expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
   updater.emit('download-progress',{percent:42});expect(service.getState().progress).toBe(42);
   updater.emit('update-downloaded',{version:'1.0.1'});
-  await service.check();expect(updater.checkForUpdates).not.toHaveBeenCalled();
-  service.install();expect(updater.quitAndInstall).toHaveBeenCalledWith(false,true);
+  await service.check();expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  await service.install();expect(updater.quitAndInstall).toHaveBeenCalledWith(false,true);
  });
  it('handles offline failures and permits retry without interrupting editing',async()=>{
   const {service,updater}=setup();updater.checkForUpdates.mockRejectedValueOnce(Error('offline'));
@@ -39,7 +70,7 @@ describe('safe installer updates',()=>{
   const {service,updater,fetch,openExternal}=setup('1.0.0','darwin');
   fetch.mockResolvedValue({ok:true,json:async()=>[{tag_name:'v1.0.1'}]});
   expect((await service.check()).status).toBe('available');await service.download();expect(updater.downloadUpdate).not.toHaveBeenCalled();
-  expect(()=>service.install()).toThrow();await service.openDownloads();expect(openExternal).toHaveBeenCalledWith('https://github.com/ventsdenye2/fangjing-voxel-studio/releases');
+  await expect(service.install()).rejects.toThrow();await service.openDownloads();expect(openExternal).toHaveBeenCalledWith('https://github.com/ventsdenye2/fangjing-voxel-studio/releases');
  });
  it('never contacts the update server from a development build',async()=>{
   const {service,updater,fetch}=setup('1.0.0','win32',false);await service.check();expect(updater.checkForUpdates).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();

@@ -10,7 +10,7 @@ export default function BoxSelectionPanel({asset,value,onChange,onExtract,onClos
   onChange({...value,bounds:{min,max:min.map((v,i)=>v+size[i]) as Vec3}});
  };
  return <section className="inspector-section box-selection-panel" aria-label="3D 框选拆分">
-  <h3>3D 框选拆分</h3><p className="muted">拖动视口中的轴移动或缩放选框。按模型自身的体素格吸附，只处理当前物件。</p>
+  <h3>3D 框选拆分</h3><p className="muted">按住左键拖动彩色控制轴，松开即停止；左键不会移动镜头。右键旋转视角，滚轮缩放。也可在下方输入选框范围，只处理当前物件。</p>
   <div className="button-row"><button className={value.tool==='translate'?'active':''} onClick={()=>onChange({...value,tool:'translate'})}>移动选框</button><button className={value.tool==='scale'?'active':''} onClick={()=>onChange({...value,tool:'scale'})}>缩放选框</button></div>
   {(['min','size'] as const).map(kind=><div key={kind} className="transform-field"><span>{kind==='min'?'起点（格）':'尺寸（格）'}</span><div>{['X','Y','Z'].map((axis,i)=><label key={axis}><small>{axis}</small><input type="number" step={1} aria-label={'选框'+(kind==='min'?'起点':'尺寸')+' '+axis} value={kind==='min'?value.bounds.min[i]:value.bounds.max[i]-value.bounds.min[i]} onChange={e=>change(kind,i,Number(e.target.value))}/></label>)}</div></div>)}
   <div className="button-row"><button onClick={()=>onChange({...value,bounds:{min:[0,0,0],max:[...asset.dimensions]}})}>框选整个模型</button><button onClick={()=>onChange({...value,bounds:initialVoxelBox(asset)})}>重置为上半部</button></div>

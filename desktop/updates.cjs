@@ -11,7 +11,7 @@ function createUpdates({ app, updater, platform = process.platform, portable = !
   const mode = !app.isPackaged ? 'development' : platform === 'win32' && !portable ? 'automatic' : 'manual';
   let state = { mode, status: 'idle', currentVersion: app.getVersion(), version: '', progress: 0,
     message: mode === 'development' ? '开发模式不检查更新' : mode === 'automatic' ? '启动后自动检查新版；下载后可保存工程并重启安装。' : '自动检查新版；当前 Mac 包未签名，需要下载后手动安装。' };
-  let checking = false;
+  let checking = false, downloadedVersion = '';
   const patch = value => { state = {...state,...value}; notify({...state}); };
   if (mode === 'automatic') {
     updater.autoDownload = false;
@@ -19,16 +19,18 @@ function createUpdates({ app, updater, platform = process.platform, portable = !
     updater.allowPrerelease = !!semver.prerelease(state.currentVersion);
     updater.allowDowngrade = false;
     updater.on('checking-for-update',()=>patch({status:'checking',message:'正在检查更新…'}));
-    updater.on('update-available',info=>patch({status:'available',version:info.version,progress:0,message:'发现新版本 '+info.version}));
+    updater.on('update-available',info=>patch(info.version===downloadedVersion
+      ? {status:'downloaded',version:info.version,progress:100,message:'最新版本 '+info.version+' 已下载，可保存工程后重启安装。'}
+      : {status:'available',version:info.version,progress:0,message:'发现最新版本 '+info.version}));
     updater.on('update-not-available',()=>patch({status:'current',message:'当前已是最新版本'}));
     updater.on('download-progress',info=>patch({status:'downloading',progress:Math.min(100,Math.max(0,info.percent)),message:'正在下载更新…'}));
-    updater.on('update-downloaded',info=>patch({status:'downloaded',version:info.version,progress:100,message:'更新已下载。保存工程后可重启安装。'}));
+    updater.on('update-downloaded',info=>{downloadedVersion=info.version;patch({status:'downloaded',version:info.version,progress:100,message:'更新已下载。保存工程后可重启安装。'});});
     updater.on('error',error=>patch({status:'error',message:'更新失败，可稍后重试：'+error.message}));
   }
   return {
     getState:()=>({...state}),
     async check() {
-      if(mode==='development'||checking||['downloading','downloaded'].includes(state.status))return {...state};
+      if(mode==='development'||checking||state.status==='downloading')return {...state};
       checking=true;patch({status:'checking',message:'正在检查更新…'});
       try {
         if(mode==='automatic') await updater.checkForUpdates();
@@ -45,13 +47,20 @@ function createUpdates({ app, updater, platform = process.platform, portable = !
     },
     async download() {
       if(mode!=='automatic'||state.status!=='available')return {...state};
+      // Refresh the release target: the version shown hours ago may be superseded.
+      await this.check();
+      if(state.status!=='available')return {...state};
       patch({status:'downloading',progress:0,message:'正在下载更新…'});
       try { await updater.downloadUpdate(); }
       catch(error) { patch({status:'error',message:'下载失败，可重新检查并重试：'+error.message}); }
       return {...state};
     },
-    install() {
+    async install() {
       if(mode!=='automatic'||state.status!=='downloaded')throw Error('更新尚未下载完成');
+      // A previously downloaded installer must not force an intermediate upgrade.
+      await this.check();
+      if(state.status==='available')await this.download();
+      if(state.status!=='downloaded')throw Error('无法确认或下载最新版本，请重新检查更新后重试。');
       updater.quitAndInstall(false,true);
     },
     openDownloads:()=>openExternal(RELEASES)

@@ -71,7 +71,7 @@ jobs:
           cat > release-notes.md <<'NOTES'
           Windows x64 installer with .vxlproj file association and in-app updates.
 
-          New in v0.1.1: select part of a voxel model with a movable, resizable 3D box, then split or copy it into an independent asset. Preserves world position, isolates the current instance, and supports undo/redo. In Scene mode, select a model and use the 3D box selection panel on the right.
+          New in v0.1.2: fixes mouse capture conflicts in 3D box selection. Releasing the mouse stops dragging; left drag only edits the selection box. Updates refresh the latest release before downloading and installing, replacing cached intermediate installers without requiring sequential upgrades.
 
           Save your project before installing. Existing portable users must install this version once; subsequent updates are available in Settings. macOS remains available separately in the alpha.8 prerelease.
 
@@ -82,6 +82,9 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease"
+          if [[ "$prerelease" == false ]]; then
+            gh release edit "$RELEASE_TAG" --latest
+          fi
 
       - name: Mark superseded broken portable release
         if: github.ref_name != 'v0.1.0-alpha.2'
